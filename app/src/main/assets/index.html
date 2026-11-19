@@ -1,0 +1,2105 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Домашняя аптечка — учёт лекарств, инструкции и напоминания</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background-color: #f8fafc;
+      color: #0f172a;
+    }
+    .tab-active {
+      background-color: #0d9488;
+      color: #ffffff;
+    }
+    .tab-inactive {
+      color: #475569;
+    }
+    .tab-inactive:hover {
+      background-color: #f1f5f9;
+      color: #0f172a;
+    }
+    @keyframes pulse-ring {
+      0% { transform: scale(0.95); opacity: 0.9; }
+      70% { transform: scale(1.05); opacity: 0.4; }
+      100% { transform: scale(0.95); opacity: 0.9; }
+    }
+    .alarm-pulse {
+      animation: pulse-ring 1.6s infinite ease-in-out;
+    }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
+    ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+  <!-- Top Alarm Banner (Hidden by default, shown when medication time arrives) -->
+  <div id="activeAlarmBanner" class="hidden bg-amber-500 text-white px-4 py-3 shadow-lg sticky top-0 z-50">
+    <div class="max-w-6xl mx-auto flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <span class="inline-flex items-center justify-center w-9 h-9 rounded-full bg-white/20 alarm-pulse text-lg">⏰</span>
+        <div>
+          <p class="font-bold text-sm sm:text-base" id="alarmBannerTitle">Пора принять лекарство!</p>
+          <p class="text-xs sm:text-sm text-amber-50" id="alarmBannerSubtitle"></p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 self-end sm:self-center">
+        <button id="alarmTakeBtn" class="px-3.5 py-1.5 bg-white text-amber-700 font-semibold text-xs sm:text-sm rounded-lg hover:bg-amber-50 transition">
+          ✓ Принял(а)
+        </button>
+        <button id="alarmSnoozeBtn" class="px-3 py-1.5 bg-amber-600 text-white font-medium text-xs sm:text-sm rounded-lg hover:bg-amber-700 transition">
+          Отложить на 10 мин
+        </button>
+        <button id="alarmDismissBtn" class="px-2.5 py-1.5 text-amber-100 hover:text-white text-sm font-medium">
+          ✕
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Header -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-30">
+    <div class="max-w-6xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-2.5">
+        <div class="w-10 h-10 rounded-xl bg-teal-600 text-white flex items-center justify-center shadow-sm">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M19 11H5m7-7v14M6 3h12a3 3 0 013 3v12a3 3 0 01-3 3H6a3 3 0 01-3-3V6a3 3 0 013-3z"/>
+          </svg>
+        </div>
+        <div>
+          <h1 class="text-lg sm:text-xl font-bold text-slate-900 leading-tight">Домашняя аптечка</h1>
+          <p class="text-xs text-slate-500">Учёт лекарств, инструкции и напоминания</p>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <nav class="flex items-center gap-1 bg-slate-100 p-1 rounded-xl overflow-x-auto max-w-full" aria-label="Разделы">
+        <button data-tab="cabinet" class="nav-tab tab-active px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium whitespace-nowrap transition">
+          💊 Аптечка <span id="badgeCabinetCount" class="ml-1 px-1.5 py-0.5 text-[11px] rounded-full bg-white/20">0</span>
+        </button>
+        <button data-tab="schedule" class="nav-tab tab-inactive px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium whitespace-nowrap transition">
+          ⏰ Приём <span id="badgeScheduleCount" class="ml-1 px-1.5 py-0.5 text-[11px] rounded-full bg-slate-200 text-slate-700">0</span>
+        </button>
+        <button data-tab="shopping" class="nav-tab tab-inactive px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium whitespace-nowrap transition">
+          🛒 Докупить <span id="badgeShoppingCount" class="ml-1 px-1.5 py-0.5 text-[11px] rounded-full bg-slate-200 text-slate-700">0</span>
+        </button>
+        <button data-tab="backup" class="nav-tab tab-inactive px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium whitespace-nowrap transition">
+          ⚙️ Данные
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="flex-1 max-w-6xl w-full mx-auto px-4 py-5 space-y-5">
+
+    <!-- TAB 1: CABINET -->
+    <section id="view-cabinet" class="space-y-5">
+      <!-- KPI Cards -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm">
+          <p class="text-xs font-medium text-slate-500">Всего препаратов</p>
+          <p id="kpiTotal" class="text-2xl font-bold text-slate-900 mt-1">0</p>
+        </div>
+        <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm cursor-pointer hover:border-amber-300 transition" id="kpiExpiringCard">
+          <p class="text-xs font-medium text-amber-600">Скоро истекает (≤30 дн.)</p>
+          <p id="kpiExpiring" class="text-2xl font-bold text-amber-600 mt-1">0</p>
+        </div>
+        <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm cursor-pointer hover:border-rose-300 transition" id="kpiExpiredCard">
+          <p class="text-xs font-medium text-rose-600">Просрочено</p>
+          <p id="kpiExpired" class="text-2xl font-bold text-rose-600 mt-1">0</p>
+        </div>
+        <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm cursor-pointer hover:border-teal-300 transition" id="kpiTodayCard">
+          <p class="text-xs font-medium text-teal-600">Приёмов сегодня</p>
+          <p id="kpiTodayDoses" class="text-2xl font-bold text-teal-600 mt-1">0/0</p>
+        </div>
+      </div>
+
+      <!-- Toolbar: Search, Filters, Add -->
+      <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm space-y-3">
+        <div class="flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
+          <div class="relative flex-1">
+            <svg class="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z"/>
+            </svg>
+            <input id="searchInput" type="text" placeholder="Поиск по названию, симптомам или месту хранения..."
+              class="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:bg-white transition" />
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <button id="openAddMedBtn" class="px-4 py-2.5 bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold rounded-xl shadow-sm transition flex items-center gap-1.5">
+              <span>+ Добавить лекарство</span>
+            </button>
+            <button id="openPresetsBtn" class="px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium rounded-xl transition">
+              📦 Наборы
+            </button>
+            <button id="purgeExpiredBtn" class="hidden px-3.5 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 text-sm font-medium rounded-xl border border-rose-200 transition">
+              🗑️ Убрать просроченное
+            </button>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap gap-2 items-center pt-1">
+          <select id="filterCategory" class="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs sm:text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500">
+            <option value="all">Все категории</option>
+            <option value="Жаропонижающее и боль">Жаропонижающее и боль</option>
+            <option value="От кашля и простуды">От кашля и простуды</option>
+            <option value="ЖКТ и пищеварение">ЖКТ и пищеварение</option>
+            <option value="Аллергия">Аллергия</option>
+            <option value="Антисептики и раны">Антисептики и раны</option>
+            <option value="Сердце и давление">Сердце и давление</option>
+            <option value="Витамины">Витамины</option>
+            <option value="Другое">Другое</option>
+          </select>
+
+          <select id="filterStatus" class="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs sm:text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500">
+            <option value="all">Любой срок годности</option>
+            <option value="ok">В норме</option>
+            <option value="expiring">Скоро истекает (≤30 дн.)</option>
+            <option value="expired">Просрочено</option>
+            <option value="low">Заканчивается</option>
+          </select>
+
+          <select id="filterForm" class="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs sm:text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500">
+            <option value="all">Все формы</option>
+            <option value="Таблетки">Таблетки</option>
+            <option value="Капсулы">Капсулы</option>
+            <option value="Сироп">Сироп</option>
+            <option value="Капли">Капли</option>
+            <option value="Спрей">Спрей</option>
+            <option value="Мазь / Гель">Мазь / Гель</option>
+            <option value="Порошок">Порошок</option>
+            <option value="Раствор">Раствор</option>
+          </select>
+
+          <button id="resetFiltersBtn" class="hidden text-xs text-teal-600 hover:text-teal-800 font-medium px-2 py-1">
+            Сбросить фильтры
+          </button>
+        </div>
+      </div>
+
+      <!-- Medicine Cards Grid -->
+      <div id="medGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+
+      <!-- Empty State -->
+      <div id="medEmptyState" class="hidden bg-white rounded-2xl border border-dashed border-slate-300 p-10 text-center space-y-3">
+        <div class="text-4xl">🩺</div>
+        <h3 class="text-base font-semibold text-slate-800">Лекарства не найдены</h3>
+        <p class="text-sm text-slate-500 max-w-md mx-auto">Добавьте препараты из вашей домашней аптечки вручную или загрузите готовый базовый набор, чтобы протестировать приложение.</p>
+        <div class="flex justify-center gap-2 pt-2">
+          <button id="emptyAddBtn" class="px-4 py-2 bg-teal-600 text-white text-sm font-semibold rounded-xl hover:bg-teal-700 transition">+ Добавить лекарство</button>
+          <button id="emptyPresetBtn" class="px-4 py-2 bg-slate-100 text-slate-700 text-sm font-medium rounded-xl hover:bg-slate-200 transition">📦 Базовый набор</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 2: SCHEDULE & NOTIFICATIONS -->
+    <section id="view-schedule" class="hidden space-y-5">
+      <!-- Notification Controls -->
+      <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h2 class="text-base font-bold text-slate-900">Назначения врача и напоминания</h2>
+          <p class="text-xs text-slate-500 mt-0.5">Соберите список назначений: приложение напомнит вовремя и автоматически спишет дозу из аптечки.</p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <button id="enableNotifBtn" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium rounded-xl transition">
+            🔔 Системные уведомления
+          </button>
+          <button id="toggleSoundBtn" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium rounded-xl transition">
+            🔊 Звук: Вкл
+          </button>
+          <button id="testAlarmBtn" class="px-3 py-2 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 text-xs font-medium rounded-xl transition">
+            ⚡ Тест сигнала
+          </button>
+          <button id="openAddScheduleBtn" class="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-xs sm:text-sm font-semibold rounded-xl shadow-sm transition">
+            + Новое назначение
+          </button>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <!-- Today's Timeline -->
+        <div class="lg:col-span-2 bg-white rounded-2xl p-4 border border-slate-200 shadow-sm space-y-3">
+          <div class="flex items-center justify-between">
+            <h3 class="font-bold text-slate-900 text-sm sm:text-base">Расписание на сегодня (<span id="todayDateLabel"></span>)</h3>
+            <span id="todayProgressText" class="text-xs font-medium text-teal-700 bg-teal-50 px-2.5 py-1 rounded-full">0 из 0 принято</span>
+          </div>
+          <div id="todayTimeline" class="space-y-2.5"></div>
+        </div>
+
+        <!-- Active Prescriptions List -->
+        <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm space-y-3">
+          <h3 class="font-bold text-slate-900 text-sm sm:text-base">Активные курсы</h3>
+          <div id="prescriptionsList" class="space-y-2.5"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 3: SHOPPING LIST -->
+    <section id="view-shopping" class="hidden space-y-5">
+      <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h2 class="text-base font-bold text-slate-900">Список покупок для аптечки</h2>
+          <p class="text-xs text-slate-500 mt-0.5">Сюда можно добавлять заканчивающиеся или просроченные лекарства, чтобы не забыть купить в аптеке.</p>
+        </div>
+        <button id="autoFillShoppingBtn" class="px-3.5 py-2 bg-teal-50 hover:bg-teal-100 text-teal-700 border border-teal-200 text-xs sm:text-sm font-medium rounded-xl transition">
+          ✨ Добавить всё, что заканчивается / истекло
+        </button>
+      </div>
+
+      <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm space-y-4">
+        <form id="shoppingAddForm" class="flex gap-2">
+          <input id="shoppingInput" type="text" placeholder="Что нужно купить в аптеке? (напр. Бинт стерильный, Пластырь...)"
+            class="flex-1 px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
+          <button type="submit" class="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold rounded-xl transition">
+            Добавить
+          </button>
+        </form>
+        <div id="shoppingListContainer" class="divide-y divide-slate-100"></div>
+      </div>
+    </section>
+
+    <!-- TAB 4: DATA & BACKUP -->
+    <section id="view-backup" class="hidden space-y-5">
+      <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-4">
+        <div>
+          <h2 class="text-base font-bold text-slate-900">Управление данными и резервная копия</h2>
+          <p class="text-xs text-slate-500 mt-1">Все данные хранятся локально в вашем браузере. Вы можете выгрузить резервную копию в JSON или перенести её на другое устройство.</p>
+        </div>
+        <div class="flex flex-wrap gap-3">
+          <button id="exportJsonBtn" class="px-4 py-2.5 bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold rounded-xl transition">
+            ⬇️ Скачать резервную копию (.json)
+          </button>
+          <label class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium rounded-xl cursor-pointer transition">
+            ⬆️ Загрузить из .json
+            <input id="importJsonInput" type="file" accept=".json,application/json" class="hidden" />
+          </label>
+          <button id="restoreDemoBtn" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium rounded-xl transition">
+            🔄 Загрузить демо-примеры
+          </button>
+          <button id="clearAllDataBtn" class="px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-sm font-medium rounded-xl transition">
+            🗑️ Очистить всю аптечку
+          </button>
+        </div>
+      </div>
+
+      <div class="bg-sky-50 border border-sky-200 rounded-2xl p-4 text-xs sm:text-sm text-sky-900 space-y-1.5">
+        <p class="font-semibold">ℹ️ Об источниках инструкций и безопасности</p>
+        <p>Инструкции и фото подтягиваются из открытых источников (<a href="https://ru.wikipedia.org" target="_blank" rel="noopener" class="underline font-medium">Wikipedia</a> и <a href="https://open.fda.gov" target="_blank" rel="noopener" class="underline font-medium">OpenFDA</a>) и встроенного справочника. Информация носит справочно-организационный характер и не заменяет консультацию врача или чтение бумажного вкладыша в упаковке.</p>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="bg-white border-t border-slate-200 py-3 px-4 mt-8">
+    <div class="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-500">
+      <span>Домашняя аптечка • Хранение данных локально в браузере</span>
+      <span>Перед применением лекарств всегда сверяйтесь с официальной инструкцией и врачом</span>
+    </div>
+  </footer>
+
+  <!-- MODAL: Add / Edit Medicine -->
+  <div id="medModal" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+    <div class="bg-white rounded-2xl shadow-xl max-w-lg w-full p-5 space-y-4 my-auto max-h-[92vh] overflow-y-auto">
+      <div class="flex items-center justify-between">
+        <h3 id="medModalTitle" class="text-lg font-bold text-slate-900">Добавить лекарство</h3>
+        <button id="closeMedModalBtn" class="text-slate-400 hover:text-slate-700 text-xl leading-none">&times;</button>
+      </div>
+
+      <form id="medForm" class="space-y-3">
+        <input type="hidden" id="medEditId" />
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Название препарата *</label>
+          <div class="flex gap-2">
+            <input id="medName" type="text" required list="popularMedsDatalist" placeholder="Например: Аспирин, Сироп от кашля Лазолван..."
+              class="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
+            <button type="button" id="fetchInfoPreviewBtn" class="px-3 py-2 bg-teal-50 hover:bg-teal-100 text-teal-700 text-xs font-semibold rounded-xl border border-teal-200 whitespace-nowrap transition" title="Найти фото и инструкцию из открытых источников">
+              🔍 Найти фото
+            </button>
+          </div>
+          <datalist id="popularMedsDatalist">
+            <option value="Аспирин">
+            <option value="Парацетамол">
+            <option value="Ибупрофен (Нурофен)">
+            <option value="Амброксол (Лазолван) сироп">
+            <option value="Но-шпа (Дротаверин)">
+            <option value="Активированный уголь">
+            <option value="Смекта">
+            <option value="Лоратадин">
+            <option value="Хлоргексидин">
+            <option value="Пантенол">
+            <option value="Омепразол">
+            <option value="Валидол">
+          </datalist>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Форма выпуска</label>
+            <select id="medFormType" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
+              <option value="Таблетки">Таблетки</option>
+              <option value="Капсулы">Капсулы</option>
+              <option value="Сироп">Сироп</option>
+              <option value="Капли">Капли</option>
+              <option value="Спрей">Спрей</option>
+              <option value="Мазь / Гель">Мазь / Гель</option>
+              <option value="Порошок">Порошок</option>
+              <option value="Раствор">Раствор</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Дозировка</label>
+            <input id="medDosage" type="text" placeholder="напр. 500 мг или 30 мг/5 мл"
+              class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
+          </div>
+        </div>
+
+        <div class="grid grid-cols-3 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Количество *</label>
+            <input id="medQty" type="number" step="any" min="0" required placeholder="10"
+              class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Единица</label>
+            <select id="medUnit" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
+              <option value="шт.">шт. (табл./капс.)</option>
+              <option value="блист.">блистеров</option>
+              <option value="мл">мл</option>
+              <option value="флакон">флакон(ов)</option>
+              <option value="пак.">пакетиков</option>
+              <option value="тюбик">тюбик(ов)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Шаг списания</label>
+            <input id="medStep" type="number" step="any" min="0.5" value="1" title="Сколько списывать за одно нажатие кнопки минус"
+              class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Срок годности (до) *</label>
+            <input id="medExpiry" type="date" required
+              class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Категория</label>
+            <select id="medCategory" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
+              <option value="Жаропонижающее и боль">Жаропонижающее и боль</option>
+              <option value="От кашля и простуды">От кашля и простуды</option>
+              <option value="ЖКТ и пищеварение">ЖКТ и пищеварение</option>
+              <option value="Аллергия">Аллергия</option>
+              <option value="Антисептики и раны">Антисептики и раны</option>
+              <option value="Сердце и давление">Сердце и давление</option>
+              <option value="Витамины">Витамины</option>
+              <option value="Другое">Другое</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Где лежит дома</label>
+            <input id="medLocation" type="text" placeholder="напр. Шкафчик в прихожей"
+              class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Свое фото упаковки</label>
+            <label class="flex items-center justify-center px-3 py-2 bg-slate-50 border border-dashed border-slate-300 rounded-xl text-xs text-slate-600 hover:bg-slate-100 cursor-pointer transition">
+              <span id="medPhotoFileLabel">📷 Загрузить фото</span>
+              <input id="medPhotoFile" type="file" accept="image/*" class="hidden" />
+            </label>
+          </div>
+        </div>
+
+        <!-- Photo preview in modal -->
+        <div id="medModalPhotoPreviewWrap" class="hidden flex items-center gap-3 p-2.5 bg-slate-50 rounded-xl border border-slate-200">
+          <img id="medModalPhotoPreview" src="" alt="Фото препарата" class="w-14 h-14 object-cover rounded-lg border border-slate-200 bg-white" />
+          <div class="flex-1 min-w-0">
+            <p class="text-xs font-medium text-slate-700 truncate" id="medModalPhotoSourceText">Фото найдено</p>
+            <button type="button" id="clearModalPhotoBtn" class="text-xs text-rose-600 hover:underline mt-0.5">Удалить фото</button>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Заметка (от чего, кто назначил)</label>
+          <input id="medNotes" type="text" placeholder="Например: При сухом кашле, 3 раза в день"
+            class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
+        </div>
+
+        <div class="flex items-center justify-end gap-2 pt-2">
+          <button type="button" id="cancelMedModalBtn" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium rounded-xl transition">
+            Отмена
+          </button>
+          <button type="submit" class="px-5 py-2 bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold rounded-xl shadow-sm transition">
+            Сохранить и подтянуть инструкцию
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: Instruction & Photo Details -->
+  <div id="detailModal" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+    <div class="bg-white rounded-2xl shadow-xl max-w-2xl w-full p-5 sm:p-6 space-y-4 my-auto max-h-[92vh] overflow-y-auto">
+      <div class="flex items-start justify-between gap-3">
+        <div class="flex items-center gap-3.5">
+          <img id="detailPhoto" src="" alt="" class="hidden w-16 h-16 sm:w-20 sm:h-20 object-cover rounded-xl border border-slate-200 bg-slate-50 shrink-0" />
+          <div id="detailIconFallback" class="w-16 h-16 sm:w-20 sm:h-20 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center text-3xl shrink-0">💊</div>
+          <div>
+            <h3 id="detailTitle" class="text-lg sm:text-xl font-bold text-slate-900"></h3>
+            <p id="detailMeta" class="text-xs sm:text-sm text-slate-500 mt-0.5"></p>
+            <div id="detailBadges" class="flex flex-wrap gap-1.5 mt-2"></div>
+          </div>
+        </div>
+        <button id="closeDetailModalBtn" class="text-slate-400 hover:text-slate-700 text-2xl leading-none">&times;</button>
+      </div>
+
+      <!-- Action Strip -->
+      <div class="flex flex-wrap gap-2 pt-1 border-t border-slate-100">
+        <button id="detailRefreshApiBtn" class="px-3 py-1.5 bg-teal-50 hover:bg-teal-100 text-teal-700 text-xs font-semibold rounded-lg border border-teal-200 transition">
+          🔄 Обновить из открытых источников
+        </button>
+        <button id="detailCreateScheduleBtn" class="px-3 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-700 text-xs font-semibold rounded-lg border border-sky-200 transition">
+          ⏰ Настроить напоминание
+        </button>
+        <button id="detailEditBtn" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium rounded-lg transition">
+          ✏️ Редактировать
+        </button>
+        <button id="detailToShoppingBtn" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium rounded-lg transition">
+          🛒 В список покупок
+        </button>
+      </div>
+
+      <!-- Instruction Content -->
+      <div id="detailInstructionArea" class="space-y-3 text-sm text-slate-700">
+        <div id="detailLoadingState" class="hidden flex items-center gap-2 text-teal-700 bg-teal-50 p-3 rounded-xl text-xs font-medium">
+          <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+          </svg>
+          <span>Загружаю инструкцию и фото из Wikipedia и OpenFDA...</span>
+        </div>
+
+        <div id="detailStructuredBody" class="space-y-3"></div>
+
+        <!-- External Medical Reference Links -->
+        <div class="pt-3 border-t border-slate-100 flex flex-wrap items-center gap-2 text-xs">
+          <span class="text-slate-500 font-medium">Проверить в справочниках:</span>
+          <a id="linkWiki" href="#" target="_blank" rel="noopener" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-700 font-medium transition">Wikipedia ↗</a>
+          <a id="linkRls" href="#" target="_blank" rel="noopener" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-700 font-medium transition">РЛС России ↗</a>
+          <a id="linkVidal" href="#" target="_blank" rel="noopener" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-700 font-medium transition">Vidal ↗</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Add Schedule / Prescription -->
+  <div id="scheduleModal" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+    <div class="bg-white rounded-2xl shadow-xl max-w-md w-full p-5 space-y-4 my-auto">
+      <div class="flex items-center justify-between">
+        <h3 class="text-lg font-bold text-slate-900">Назначение врача / Напоминание</h3>
+        <button id="closeScheduleModalBtn" class="text-slate-400 hover:text-slate-700 text-xl leading-none">&times;</button>
+      </div>
+
+      <form id="scheduleForm" class="space-y-3">
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Лекарство из аптечки</label>
+          <select id="schedMedSelect" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
+            <option value="">— Ввести название вручную —</option>
+          </select>
+        </div>
+
+        <div id="schedCustomNameWrap">
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Название препарата *</label>
+          <input id="schedCustomName" type="text" placeholder="Например: Антибиотик Амоксиклав"
+            class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Разовая доза *</label>
+            <input id="schedDoseText" type="text" required placeholder="напр. 1 табл. или 10 мл" value="1 табл."
+              class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Списывать из аптечки</label>
+            <input id="schedDeductAmount" type="number" step="any" min="0" value="1"
+              class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Время приёма (можно несколько через запятую) *</label>
+          <input id="schedTimes" type="text" required placeholder="08:00, 14:00, 20:00" value="09:00, 21:00"
+            class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
+          <p class="text-[11px] text-slate-400 mt-1">Формат ЧЧ:ММ, например: 08:00, 13:30, 21:00</p>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Комментарий врача (условия приёма)</label>
+          <input id="schedNote" type="text" placeholder="Например: После еды, запить стаканом воды"
+            class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
+        </div>
+
+        <div class="flex justify-end gap-2 pt-2">
+          <button type="button" id="cancelScheduleModalBtn" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium rounded-xl transition">Отмена</button>
+          <button type="submit" class="px-5 py-2 bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold rounded-xl shadow-sm transition">Сохранить</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: Presets -->
+  <div id="presetsModal" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-xl max-w-md w-full p-5 space-y-4">
+      <div class="flex items-center justify-between">
+        <h3 class="text-lg font-bold text-slate-900">Готовые наборы лекарств</h3>
+        <button id="closePresetsModalBtn" class="text-slate-400 hover:text-slate-700 text-xl leading-none">&times;</button>
+      </div>
+      <p class="text-xs text-slate-500">Быстро добавьте популярные лекарства в аптечку, а затем скорректируйте ваши сроки годности и остатки.</p>
+      <div class="space-y-2.5">
+        <button data-preset="basic" class="preset-pick-btn w-full text-left p-3 rounded-xl border border-slate-200 hover:border-teal-400 hover:bg-teal-50/40 transition">
+          <p class="font-semibold text-sm text-slate-900">🏠 Базовая домашняя аптечка</p>
+          <p class="text-xs text-slate-500 mt-0.5">Парацетамол, Аспирин, Хлоргексидин, Активированный уголь, Пантенол</p>
+        </button>
+        <button data-preset="cold" class="preset-pick-btn w-full text-left p-3 rounded-xl border border-slate-200 hover:border-teal-400 hover:bg-teal-50/40 transition">
+          <p class="font-semibold text-sm text-slate-900">🤒 При простуде и кашле</p>
+          <p class="text-xs text-slate-500 mt-0.5">Амброксол (Лазолван) сироп, Ибупрофен, Спрей для носа, Витамин C</p>
+        </button>
+        <button data-preset="stomach" class="preset-pick-btn w-full text-left p-3 rounded-xl border border-slate-200 hover:border-teal-400 hover:bg-teal-50/40 transition">
+          <p class="font-semibold text-sm text-slate-900">🍽️ Для ЖКТ и от аллергии</p>
+          <p class="text-xs text-slate-500 mt-0.5">Смекта, Но-шпа (Дротаверин), Омепразол, Лоратадин</p>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Confirmation Dialog -->
+  <div id="confirmModal" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-xl max-w-sm w-full p-5 space-y-4">
+      <h3 id="confirmTitle" class="text-base font-bold text-slate-900">Подтверждение</h3>
+      <p id="confirmMessage" class="text-sm text-slate-600"></p>
+      <div class="flex justify-end gap-2">
+        <button id="confirmCancelBtn" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium rounded-xl transition">Отмена</button>
+        <button id="confirmOkBtn" class="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-sm font-semibold rounded-xl transition">Удалить</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toastContainer" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-sm"></div>
+
+  <script>
+    const DRUG_REFERENCE = [
+      {
+        keys: ['аспирин', 'ацетилсалициловая кислота', 'aspirin'],
+        inn: 'aspirin',
+        wikiTitle: 'Ацетилсалициловая кислота',
+        indications: 'Болевой синдром слабой и средней интенсивности (головная, зубная, мышечная боль), повышенная температура тела при простудных и инфекционных заболеваниях.',
+        dosage: 'Взрослым обычно по 500–1000 мг после еды, запивая достаточным количеством воды. Максимальная суточная доза — 3–4 г (согласно инструкции к конкретному препарату).',
+        warnings: 'Противопоказан при язвенной болезни ЖКТ в стадии обострения, склонности к кровотечениям, бронхиальной астме («аспириновая триада»), детям до 15 лет при ОРВИ.',
+        storage: 'В сухом, защищённом от света месте при температуре не выше 25 °C.'
+      },
+      {
+        keys: ['парацетамол', 'панадол', 'эффералган', 'paracetamol', 'acetaminophen'],
+        inn: 'acetaminophen',
+        wikiTitle: 'Парацетамол',
+        indications: 'Лихорадка при инфекционно-воспалительных заболеваниях, умеренный болевой синдром (головная, зубная боль, миалгия).',
+        dosage: 'Взрослым по 500 мг до 3–4 раз в сутки (не более 4 г/сут) с интервалом не менее 4 часов. Детям доза рассчитывается строго по весу.',
+        warnings: 'Избегать одновременного приёма с другими препаратами, содержащими парацетамол, и алкоголем (риск поражения печени).',
+        storage: 'При температуре не выше 25 °C в недоступном для детей месте.'
+      },
+      {
+        keys: ['ибупрофен', 'нурофен', 'миг', 'ibuprofen'],
+        inn: 'ibuprofen',
+        wikiTitle: 'Ибупрофен',
+        indications: 'Жар и лихорадка, головная и зубная боль, боли в спине и суставах, симптомы простуды и гриппа.',
+        dosage: 'Взрослым по 200–400 мг 3–4 раза в сутки после еды (максимум 1200 мг/сут без назначения врача).',
+        warnings: 'Осторожность при заболеваниях ЖКТ, почек, печени и артериальной гипертензии. Не сочетать с другими НПВП.',
+        storage: 'При температуре не выше 25 °C.'
+      },
+      {
+        keys: ['амброксол', 'лазолван', 'сироп от кашля', 'амбробене', 'ambroxol'],
+        inn: 'ambroxol',
+        wikiTitle: 'Амброксол',
+        indications: 'Острые и хронические заболевания дыхательных путей с образованием вязкой мокроты (бронхит, трахеит, пневмония).',
+        dosage: 'Сироп 30 мг/5 мл: взрослым обычно по 5–10 мл 2–3 раза в сутки после еды, запивая жидкостью. Таблетки: по 30 мг 3 раза в сутки.',
+        warnings: 'Не принимать одновременно с противокашлевыми средствами, подавляющими кашлевой рефлекс (например, кодеином).',
+        storage: 'При температуре не выше 25 °C. Открытый флакон сиропа использовать в течение срока, указанного на упаковке.'
+      },
+      {
+        keys: ['но-шпа', 'дротаверин', 'drotaverine'],
+        inn: 'drotaverine',
+        wikiTitle: 'Дротаверин',
+        indications: 'Спазмы гладкой мускулатуры при заболеваниях ЖКТ, желчевыводящих и мочевыводящих путей, головная боль напряжения, дисменорея.',
+        dosage: 'Взрослым обычно по 40–80 мг (1–2 таблетки) 2–3 раза в сутки.',
+        warnings: 'Тяжёлая печёночная, почечная или сердечная недостаточность, артериальная гипотензия.',
+        storage: 'В сухом месте при температуре 15–25 °C.'
+      },
+      {
+        keys: ['активированный уголь', 'уголь', 'activated charcoal'],
+        inn: 'charcoal',
+        wikiTitle: 'Активированный уголь',
+        indications: 'Пищевые отравления, диспепсия, метеоризм, диарея, интоксикации.',
+        dosage: 'При отравлениях и метеоризме: обычно 1 таблетка на 10 кг массы тела, запивая водой, за 1–2 часа до или после еды и других лекарств.',
+        warnings: 'Снижает всасывание других одновременно принимаемых лекарств. Противопоказан при язвенных поражениях ЖКТ и кишечных кровотечениях.',
+        storage: 'В сухом месте, отдельно от веществ, выделяющих газы и пары.'
+      },
+      {
+        keys: ['смекта', 'диосмектит', 'smecta', 'diosmectite'],
+        inn: 'diosmectite',
+        wikiTitle: 'Диосмектит',
+        indications: 'Острая и хроническая диарея, симптоматическое лечение болей при эзофагите, гастрите, колите.',
+        dosage: 'Содержимое пакетика растворяют в половине стакана воды. Взрослым обычно по 3 пакетика в сутки, соблюдая интервал 1–2 часа с другими лекарствами.',
+        warnings: 'Не применять при кишечной непроходимости и непереносимости фруктозы (для форм с сахарами).',
+        storage: 'При температуре не выше 25 °C.'
+      },
+      {
+        keys: ['лоратадин', 'кларитин', 'loratadine'],
+        inn: 'loratadine',
+        wikiTitle: 'Лоратадин',
+        indications: 'Сезонный и круглогодичный аллергический ринит, крапивница, зуд кожи, реакции на укусы насекомых.',
+        dosage: 'Взрослым и детям старше 12 лет — по 10 мг (1 таблетка) 1 раз в сутки.',
+        warnings: 'Осторожность при тяжёлых нарушениях функции печени, беременности и лактации.',
+        storage: 'При температуре не выше 25 °C.'
+      },
+      {
+        keys: ['хлоргексидин', 'chlorhexidine'],
+        inn: 'chlorhexidine',
+        wikiTitle: 'Хлоргексидин',
+        indications: 'Местный антисептик для обработки мелких ран, ссадин, ожогов, кожи и слизистых оболочек.',
+        dosage: 'Наружно: нанести раствор на поражённый участок кожи или промыть рану. Не глотать.',
+        warnings: 'Только для наружного/местного применения. Избегать попадания в глаза (если раствор не офтальмологический).',
+        storage: 'В защищённом от света месте при температуре до 25 °C.'
+      },
+      {
+        keys: ['пантенол', 'декспантенол', 'бепантен', 'panthenol', 'dexpanthenol'],
+        inn: 'dexpanthenol',
+        wikiTitle: 'Декспантенол',
+        indications: 'Поверхностные ожоги (в т.ч. солнечные), ссадины, сухость и трещины кожи, ускорение заживления.',
+        dosage: 'Наносить тонким слоем на повреждённый участок кожи 1–4 раза в сутки.',
+        warnings: 'Индивидуальная непереносимость компонентов. Не наносить на мокнущие гнойные раны без назначения врача.',
+        storage: 'При температуре не выше 25 °C.'
+      },
+      {
+        keys: ['омепразол', 'омез', 'omeprazole'],
+        inn: 'omeprazole',
+        wikiTitle: 'Омепразол',
+        indications: 'Изжога, гастроэзофагеальный рефлюкс, гастрит с повышенной кислотностью, язвенная болезнь.',
+        dosage: 'Обычно по 20 мг 1 раз в сутки утром за 30 минут до еды, не разжёвывая капсулу.',
+        warnings: 'Длительный приём требует контроля врача.',
+        storage: 'В сухом месте при температуре не выше 25 °C.'
+      },
+      {
+        keys: ['валидол', 'validol'],
+        inn: '',
+        wikiTitle: 'Валидол',
+        indications: 'Функциональные кардиалгии, неврозы, укачивание (морская и воздушная болезнь).',
+        dosage: 'По 1 таблетке под язык до полного рассасывания.',
+        warnings: 'При острой, давящей боли за грудиной, не проходящей в течение 5 минут, необходимо срочно обратиться за неотложной медицинской помощью.',
+        storage: 'В сухом прохладном месте.'
+      }
+    ];
+
+    const FORM_ICONS = {
+      'Таблетки': '💊',
+      'Капсулы': '💊',
+      'Сироп': '🧴',
+      'Капли': '💧',
+      'Спрей': '🌬️',
+      'Мазь / Гель': '🧴',
+      'Порошок': '✉️',
+      'Раствор': '🧪'
+    };
+
+    const STORAGE_KEY = 'home_medicine_cabinet_v1';
+
+    let state = {
+      activeTab: 'cabinet',
+      medicines: [],
+      schedules: [],
+      doseLogs: {},
+      shopping: [],
+      soundEnabled: true,
+      modalPhotoTemp: null,
+      modalPhotoSourceTemp: '',
+      currentDetailId: null,
+      firedAlarms: {},
+      snoozedUntil: null,
+      activeAlarmPayload: null
+    };
+
+    function loadState() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          state.medicines = Array.isArray(parsed.medicines) ? parsed.medicines : [];
+          state.schedules = Array.isArray(parsed.schedules) ? parsed.schedules : [];
+          state.doseLogs = parsed.doseLogs && typeof parsed.doseLogs === 'object' ? parsed.doseLogs : {};
+          state.shopping = Array.isArray(parsed.shopping) ? parsed.shopping : [];
+          state.soundEnabled = parsed.soundEnabled !== undefined ? parsed.soundEnabled : true;
+          return;
+        }
+      } catch (e) {}
+      seedInitialDemoData();
+    }
+
+    function saveState() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({
+          medicines: state.medicines,
+          schedules: state.schedules,
+          doseLogs: state.doseLogs,
+          shopping: state.shopping,
+          soundEnabled: state.soundEnabled
+        }));
+      } catch (e) {}
+    }
+
+    function addDaysISO(days) {
+      const d = new Date();
+      d.setDate(d.getDate() + days);
+      return d.toISOString().slice(0, 10);
+    }
+
+    function todayISO() {
+      const d = new Date();
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    }
+
+    function uid() {
+      return 'id_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
+    }
+
+    function seedInitialDemoData() {
+      state.medicines = [
+        {
+          id: uid(),
+          name: 'Аспирин',
+          form: 'Таблетки',
+          dosage: '500 мг',
+          qty: 10,
+          unit: 'шт.',
+          step: 1,
+          expiry: addDaysISO(420),
+          category: 'Жаропонижающее и боль',
+          location: 'Шкафчик в прихожей',
+          notes: '1 блистер на 10 таблеток',
+          photo: '',
+          instruction: buildLocalInstruction('Аспирин')
+        },
+        {
+          id: uid(),
+          name: 'Амброксол (Лазолван) сироп',
+          form: 'Сироп',
+          dosage: '30 мг / 5 мл',
+          qty: 100,
+          unit: 'мл',
+          step: 5,
+          expiry: addDaysISO(18),
+          category: 'От кашля и простуды',
+          location: 'Полка в гостиной',
+          notes: 'От влажного кашля, мерная ложка в коробке',
+          photo: '',
+          instruction: buildLocalInstruction('Амброксол')
+        },
+        {
+          id: uid(),
+          name: 'Хлоргексидин',
+          form: 'Раствор',
+          dosage: '0.05%',
+          qty: 1,
+          unit: 'флакон',
+          step: 1,
+          expiry: addDaysISO(-12),
+          category: 'Антисептики и раны',
+          location: 'Ванная комната',
+          notes: 'Проверить и заменить!',
+          photo: '',
+          instruction: buildLocalInstruction('Хлоргексидин')
+        }
+      ];
+
+      state.schedules = [
+        {
+          id: uid(),
+          medId: state.medicines[1].id,
+          medName: state.medicines[1].name,
+          doseText: '5 мл',
+          deductAmount: 5,
+          times: ['09:00', '20:00'],
+          note: 'После еды, запить водой'
+        }
+      ];
+
+      state.shopping = [
+        { id: uid(), name: 'Хлоргексидин 0.05% (заменить просроченный)', done: false }
+      ];
+
+      saveState();
+      state.medicines.forEach(m => {
+        fetchDrugInfoFromOpenSources(m.name, true).then(info => {
+          if (info) {
+            if (info.photo && !m.photo) m.photo = info.photo;
+            if (info.instruction) m.instruction = info.instruction;
+            saveState();
+            renderAll();
+          }
+        }).catch(() => {});
+      });
+    }
+
+    function findLocalRef(name) {
+      const q = (name || '').toLowerCase();
+      return DRUG_REFERENCE.find(r => r.keys.some(k => q.includes(k)));
+    }
+
+    function buildLocalInstruction(name) {
+      const ref = findLocalRef(name);
+      if (!ref) return null;
+      return {
+        source: 'Встроенный справочник',
+        wikiUrl: `https://ru.wikipedia.org/wiki/${encodeURIComponent(ref.wikiTitle)}`,
+        summary: '',
+        indications: ref.indications,
+        dosage: ref.dosage,
+        warnings: ref.warnings,
+        storage: ref.storage,
+        fdaExtra: ''
+      };
+    }
+
+    async function fetchWithTimeout(url, ms = 7000) {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), ms);
+      try {
+        const res = await fetch(url, { signal: ctrl.signal });
+        clearTimeout(t);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return await res.json();
+      } catch (e) {
+        clearTimeout(t);
+        throw e;
+      }
+    }
+
+    async function searchWikipediaRu(query) {
+      const clean = query.replace(/\(.*?\)/g, '').replace(/сироп|таблетки|мазь|капли|спрей|гель|раствор/gi, '').trim();
+      const term = clean || query;
+      const opensearchUrl = `https://ru.wikipedia.org/w/api.php?action=opensearch&origin=*&format=json&limit=3&search=${encodeURIComponent(term)}`;
+      const osData = await fetchWithTimeout(opensearchUrl);
+      const titles = osData && Array.isArray(osData[1]) ? osData[1] : [];
+      const bestTitle = titles[0] || term;
+
+      const queryUrl = `https://ru.wikipedia.org/w/api.php?action=query&origin=*&format=json&prop=extracts|pageimages|info&inprop=url&exintro=1&explaintext=1&pithumbsize=500&redirects=1&titles=${encodeURIComponent(bestTitle)}`;
+      const qData = await fetchWithTimeout(queryUrl);
+      const pages = qData?.query?.pages || {};
+      const page = Object.values(pages)[0];
+      if (!page || page.missing !== undefined) return null;
+
+      return {
+        title: page.title,
+        extract: page.extract || '',
+        photo: page.thumbnail?.source || '',
+        url: page.fullurl || `https://ru.wikipedia.org/wiki/${encodeURIComponent(page.title)}`
+      };
+    }
+
+    async function searchOpenFDA(innOrName) {
+      if (!innOrName) return null;
+      const url = `https://api.fda.gov/drug/label.json?search=openfda.generic_name:"${encodeURIComponent(innOrName)}"&limit=1`;
+      const data = await fetchWithTimeout(url);
+      const rec = data?.results?.[0];
+      if (!rec) return null;
+      const trimText = (arr, max = 380) => {
+        if (!arr || !arr[0]) return '';
+        const t = arr[0].replace(/\s+/g, ' ').trim();
+        return t.length > max ? t.slice(0, max) + '…' : t;
+      };
+      return {
+        indications: trimText(rec.indications_and_usage),
+        dosage: trimText(rec.dosage_and_administration),
+        warnings: trimText(rec.warnings || rec.boxed_warning || rec.contraindications)
+      };
+    }
+
+    async function fetchDrugInfoFromOpenSources(name, silent = false) {
+      const localRef = findLocalRef(name);
+      const baseInstr = buildLocalInstruction(name) || {
+        source: 'Открытые источники',
+        wikiUrl: '',
+        summary: '',
+        indications: '',
+        dosage: '',
+        warnings: '',
+        storage: '',
+        fdaExtra: ''
+      };
+
+      let wiki = null;
+      let fda = null;
+
+      try {
+        wiki = await searchWikipediaRu(localRef ? localRef.wikiTitle : name);
+      } catch (e) {}
+
+      const fdaQuery = localRef?.inn || (/^[a-zA-Z\s-]+$/.test(name) ? name.trim() : '');
+      if (fdaQuery) {
+        try {
+          fda = await searchOpenFDA(fdaQuery);
+        } catch (e) {}
+      }
+
+      if (!wiki && !fda && !localRef) {
+        if (!silent) showToast('Не удалось автоматически найти статью в Wikipedia/OpenFDA. Попробуйте уточнить название или открыть РЛС.', 'amber');
+        return null;
+      }
+
+      const sources = [];
+      if (localRef) sources.push('Справочник');
+      if (wiki) sources.push('Wikipedia');
+      if (fda) sources.push('OpenFDA');
+
+      const merged = {
+        source: sources.join(' + '),
+        wikiUrl: wiki?.url || baseInstr.wikiUrl,
+        summary: wiki?.extract ? (wiki.extract.length > 550 ? wiki.extract.slice(0, 550) + '…' : wiki.extract) : '',
+        indications: baseInstr.indications || fda?.indications || '',
+        dosage: baseInstr.dosage || fda?.dosage || '',
+        warnings: baseInstr.warnings || fda?.warnings || '',
+        storage: baseInstr.storage || 'См. инструкцию на упаковке.',
+        fdaExtra: fda && localRef ? (fda.indications || fda.warnings || '') : ''
+      };
+
+      return {
+        photo: wiki?.photo || '',
+        instruction: merged
+      };
+    }
+
+    function getExpiryInfo(expiryStr) {
+      if (!expiryStr) return { status: 'ok', days: 999, label: 'Без срока', badgeClass: 'bg-slate-100 text-slate-600' };
+      const now = new Date();
+      now.setHours(0, 0, 0, 0);
+      const exp = new Date(expiryStr + 'T00:00:00');
+      const diffDays = Math.round((exp - now) / 86400000);
+      const formatted = exp.toLocaleDateString('ru-RU');
+
+      if (diffDays < 0) {
+        return {
+          status: 'expired',
+          days: diffDays,
+          label: `Просрочено (${formatted})`,
+          badgeClass: 'bg-rose-100 text-rose-700 border border-rose-200'
+        };
+      }
+      if (diffDays <= 30) {
+        return {
+          status: 'expiring',
+          days: diffDays,
+          label: `Осталось ${diffDays} дн. (до ${formatted})`,
+          badgeClass: 'bg-amber-100 text-amber-800 border border-amber-200'
+        };
+      }
+      return {
+        status: 'ok',
+        days: diffDays,
+        label: `Годен до ${formatted}`,
+        badgeClass: 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+      };
+    }
+
+    function isLowStock(med) {
+      if (med.qty <= 0) return true;
+      if (med.unit === 'мл') return med.qty <= 20;
+      return med.qty <= 2;
+    }
+
+    function formatQty(val) {
+      return Number.isInteger(val) ? String(val) : Number(val.toFixed(2)).toString();
+    }
+
+    function renderAll() {
+      renderKPIs();
+      renderCabinet();
+      renderSchedule();
+      renderShopping();
+      updateBadges();
+    }
+
+    function updateBadges() {
+      document.getElementById('badgeCabinetCount').textContent = state.medicines.length;
+      document.getElementById('badgeScheduleCount').textContent = state.schedules.length;
+      document.getElementById('badgeShoppingCount').textContent = state.shopping.filter(s => !s.done).length;
+    }
+
+    function renderKPIs() {
+      const total = state.medicines.length;
+      let expiring = 0;
+      let expired = 0;
+      state.medicines.forEach(m => {
+        const info = getExpiryInfo(m.expiry);
+        if (info.status === 'expiring') expiring++;
+        if (info.status === 'expired') expired++;
+      });
+
+      document.getElementById('kpiTotal').textContent = total;
+      document.getElementById('kpiExpiring').textContent = expiring;
+      document.getElementById('kpiExpired').textContent = expired;
+
+      const purgeBtn = document.getElementById('purgeExpiredBtn');
+      if (expired > 0) purgeBtn.classList.remove('hidden');
+      else purgeBtn.classList.add('hidden');
+
+      const { doneCount, totalCount } = getTodayProgress();
+      document.getElementById('kpiTodayDoses').textContent = `${doneCount}/${totalCount}`;
+    }
+
+    function renderCabinet() {
+      const q = document.getElementById('searchInput').value.trim().toLowerCase();
+      const cat = document.getElementById('filterCategory').value;
+      const statusFilter = document.getElementById('filterStatus').value;
+      const formFilter = document.getElementById('filterForm').value;
+
+      const resetBtn = document.getElementById('resetFiltersBtn');
+      if (q || cat !== 'all' || statusFilter !== 'all' || formFilter !== 'all') {
+        resetBtn.classList.remove('hidden');
+      } else {
+        resetBtn.classList.add('hidden');
+      }
+
+      const filtered = state.medicines.filter(m => {
+        if (q) {
+          const hay = `${m.name} ${m.notes || ''} ${m.location || ''} ${m.category || ''} ${m.instruction?.indications || ''}`.toLowerCase();
+          if (!hay.includes(q)) return false;
+        }
+        if (cat !== 'all' && m.category !== cat) return false;
+        if (formFilter !== 'all' && m.form !== formFilter) return false;
+        const expInfo = getExpiryInfo(m.expiry);
+        if (statusFilter === 'ok' && expInfo.status !== 'ok') return false;
+        if (statusFilter === 'expiring' && expInfo.status !== 'expiring') return false;
+        if (statusFilter === 'expired' && expInfo.status !== 'expired') return false;
+        if (statusFilter === 'low' && !isLowStock(m)) return false;
+        return true;
+      });
+
+      const grid = document.getElementById('medGrid');
+      const empty = document.getElementById('medEmptyState');
+
+      if (filtered.length === 0) {
+        grid.innerHTML = '';
+        empty.classList.remove('hidden');
+        return;
+      }
+
+      empty.classList.add('hidden');
+      grid.innerHTML = filtered.map(med => {
+        const exp = getExpiryInfo(med.expiry);
+        const low = isLowStock(med);
+        const icon = FORM_ICONS[med.form] || '💊';
+        const stepLabel = formatQty(med.step || 1);
+
+        return `
+          <article class="bg-white rounded-2xl border ${exp.status === 'expired' ? 'border-rose-200' : 'border-slate-200'} shadow-sm p-4 flex flex-col justify-between gap-3 hover:shadow-md transition">
+            <div class="space-y-2.5">
+              <div class="flex items-start gap-3">
+                ${med.photo
+                  ? `<img src="${escapeAttr(med.photo)}" alt="${escapeAttr(med.name)}" class="w-14 h-14 rounded-xl object-cover border border-slate-200 bg-slate-50 shrink-0 cursor-pointer" data-action="detail" data-id="${med.id}" />`
+                  : `<div class="w-14 h-14 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center text-2xl shrink-0 cursor-pointer" data-action="detail" data-id="${med.id}">${icon}</div>`
+                }
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-start justify-between gap-1">
+                    <h3 class="font-bold text-slate-900 text-sm sm:text-base leading-snug cursor-pointer hover:text-teal-700 transition truncate" data-action="detail" data-id="${med.id}" title="${escapeAttr(med.name)}">${escapeHtml(med.name)}</h3>
+                    <button data-action="delete-med" data-id="${med.id}" class="text-slate-400 hover:text-rose-600 p-1 rounded-lg hover:bg-rose-50 transition shrink-0" title="Удалить препарат полностью">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                    </button>
+                  </div>
+                  <p class="text-xs text-slate-500 mt-0.5">${escapeHtml(med.form)}${med.dosage ? ' • ' + escapeHtml(med.dosage) : ''}</p>
+                </div>
+              </div>
+
+              <div class="flex flex-wrap gap-1.5">
+                <span class="px-2 py-0.5 rounded-full text-[11px] font-medium ${exp.badgeClass}">${exp.label}</span>
+                ${low ? `<span class="px-2 py-0.5 rounded-full text-[11px] font-medium bg-orange-100 text-orange-800 border border-orange-200">${med.qty <= 0 ? 'Закончилось' : 'Мало осталось'}</span>` : ''}
+                <span class="px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-600">${escapeHtml(med.category)}</span>
+              </div>
+
+              ${med.location ? `<p class="text-xs text-slate-500">📍 ${escapeHtml(med.location)}</p>` : ''}
+              ${med.notes ? `<p class="text-xs text-slate-600 bg-slate-50 rounded-lg px-2.5 py-1.5 line-clamp-2">${escapeHtml(med.notes)}</p>` : ''}
+            </div>
+
+            <div class="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+              <div class="flex items-center gap-1 bg-slate-100 rounded-xl p-1">
+                <button data-action="dec-qty" data-id="${med.id}" class="w-8 h-7 flex items-center justify-center rounded-lg bg-white text-slate-700 hover:bg-rose-50 hover:text-rose-700 font-bold text-sm shadow-2xs transition" title="Списать ${stepLabel} ${escapeAttr(med.unit)}">
+                  −${stepLabel}
+                </button>
+                <span class="px-2 text-xs sm:text-sm font-bold text-slate-900 min-w-[54px] text-center">
+                  ${formatQty(med.qty)} ${escapeHtml(med.unit)}
+                </span>
+                <button data-action="inc-qty" data-id="${med.id}" class="w-8 h-7 flex items-center justify-center rounded-lg bg-white text-slate-700 hover:bg-teal-50 hover:text-teal-700 font-bold text-sm shadow-2xs transition" title="Добавить ${stepLabel} ${escapeAttr(med.unit)}">
+                  +${stepLabel}
+                </button>
+              </div>
+
+              <button data-action="detail" data-id="${med.id}" class="px-3 py-1.5 bg-teal-50 hover:bg-teal-100 text-teal-700 text-xs font-semibold rounded-xl transition whitespace-nowrap">
+                📄 Инструкция
+              </button>
+            </div>
+          </article>
+        `;
+      }).join('');
+    }
+
+    function getTodayProgress() {
+      const today = todayISO();
+      const logs = state.doseLogs[today] || {};
+      let totalCount = 0;
+      let doneCount = 0;
+      state.schedules.forEach(s => {
+        (s.times || []).forEach(t => {
+          totalCount++;
+          if (logs[`${s.id}_${t}`]) doneCount++;
+        });
+      });
+      return { doneCount, totalCount };
+    }
+
+    function renderSchedule() {
+      const today = todayISO();
+      document.getElementById('todayDateLabel').textContent = new Date().toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
+      const { doneCount, totalCount } = getTodayProgress();
+      document.getElementById('todayProgressText').textContent = `${doneCount} из ${totalCount} принято`;
+
+      const soundBtn = document.getElementById('toggleSoundBtn');
+      soundBtn.textContent = state.soundEnabled ? '🔊 Звук: Вкл' : '🔇 Звук: Выкл';
+
+      const slots = [];
+      const logs = state.doseLogs[today] || {};
+      const now = new Date();
+      const nowMinutes = now.getHours() * 60 + now.getMinutes();
+
+      state.schedules.forEach(s => {
+        (s.times || []).forEach(t => {
+          const [hh, mm] = t.split(':').map(Number);
+          const slotMin = (hh || 0) * 60 + (mm || 0);
+          const key = `${s.id}_${t}`;
+          const taken = !!logs[key];
+          slots.push({ sched: s, time: t, slotMin, key, taken });
+        });
+      });
+
+      slots.sort((a, b) => a.slotMin - b.slotMin);
+
+      const timelineEl = document.getElementById('todayTimeline');
+      if (slots.length === 0) {
+        timelineEl.innerHTML = `<div class="text-center py-8 text-sm text-slate-500">На сегодня приёмов не запланировано. Нажмите «+ Новое назначение», чтобы добавить схему от врача.</div>`;
+      } else {
+        timelineEl.innerHTML = slots.map(slot => {
+          const isPast = !slot.taken && slot.slotMin < nowMinutes;
+          const badge = slot.taken
+            ? `<span class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-700">✓ Принято</span>`
+            : isPast
+              ? `<span class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-800">Ожидает</span>`
+              : `<span class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-600">Предстоит</span>`;
+
+          return `
+            <div class="flex items-center justify-between gap-3 p-3 rounded-xl border ${slot.taken ? 'bg-emerald-50/40 border-emerald-200' : 'bg-slate-50 border-slate-200'}">
+              <div class="flex items-center gap-3 min-w-0">
+                <div class="px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 font-bold text-sm text-slate-800 shrink-0">${slot.time}</div>
+                <div class="min-w-0">
+                  <p class="font-semibold text-sm text-slate-900 truncate">${escapeHtml(slot.sched.medName)} — ${escapeHtml(slot.sched.doseText)}</p>
+                  ${slot.sched.note ? `<p class="text-xs text-slate-500 truncate">${escapeHtml(slot.sched.note)}</p>` : ''}
+                </div>
+              </div>
+              <div class="flex items-center gap-2 shrink-0">
+                ${badge}
+                ${slot.taken
+                  ? `<button data-action="untake-dose" data-key="${slot.key}" class="px-2.5 py-1 text-xs text-slate-500 hover:text-slate-800 bg-white border border-slate-200 rounded-lg">Отменить</button>`
+                  : `<button data-action="take-dose" data-key="${slot.key}" data-sched="${slot.sched.id}" class="px-3 py-1.5 text-xs font-semibold bg-teal-600 hover:bg-teal-700 text-white rounded-lg shadow-2xs transition">✓ Принял</button>`
+                }
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+
+      const prescEl = document.getElementById('prescriptionsList');
+      if (state.schedules.length === 0) {
+        prescEl.innerHTML = `<p class="text-xs text-slate-500">Список назначений пуст.</p>`;
+      } else {
+        prescEl.innerHTML = state.schedules.map(s => `
+          <div class="p-3 rounded-xl border border-slate-200 bg-slate-50 space-y-1.5">
+            <div class="flex items-start justify-between gap-2">
+              <p class="font-semibold text-sm text-slate-900">${escapeHtml(s.medName)}</p>
+              <button data-action="delete-sched" data-id="${s.id}" class="text-slate-400 hover:text-rose-600 text-xs font-medium">Удалить</button>
+            </div>
+            <p class="text-xs text-slate-600">Доза: <b>${escapeHtml(s.doseText)}</b> • Время: <b>${s.times.join(', ')}</b></p>
+            ${s.note ? `<p class="text-xs text-slate-500">${escapeHtml(s.note)}</p>` : ''}
+          </div>
+        `).join('');
+      }
+    }
+
+    function renderShopping() {
+      const container = document.getElementById('shoppingListContainer');
+      if (state.shopping.length === 0) {
+        container.innerHTML = `<div class="py-8 text-center text-sm text-slate-500">Список покупок пуст.</div>`;
+        return;
+      }
+      container.innerHTML = state.shopping.map(item => `
+        <div class="py-3 flex items-center justify-between gap-3">
+          <label class="flex items-center gap-3 cursor-pointer flex-1 min-w-0">
+            <input type="checkbox" ${item.done ? 'checked' : ''} data-action="toggle-shop" data-id="${item.id}"
+              class="w-4 h-4 accent-teal-600 rounded" />
+            <span class="text-sm ${item.done ? 'line-through text-slate-400' : 'text-slate-800 font-medium'} truncate">${escapeHtml(item.name)}</span>
+          </label>
+          <div class="flex items-center gap-2 shrink-0">
+            <button data-action="shop-to-cabinet" data-id="${item.id}" class="px-2.5 py-1 bg-teal-50 hover:bg-teal-100 text-teal-700 text-xs font-medium rounded-lg transition">
+              + В аптечку
+            </button>
+            <button data-action="delete-shop" data-id="${item.id}" class="text-slate-400 hover:text-rose-600 text-sm px-1.5">&times;</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function openDetailModal(medId) {
+      const med = state.medicines.find(m => m.id === medId);
+      if (!med) return;
+      state.currentDetailId = medId;
+
+      document.getElementById('detailTitle').textContent = med.name;
+      document.getElementById('detailMeta').textContent = `${med.form}${med.dosage ? ' • ' + med.dosage : ''} • Остаток: ${formatQty(med.qty)} ${med.unit}`;
+
+      const photoEl = document.getElementById('detailPhoto');
+      const iconEl = document.getElementById('detailIconFallback');
+      if (med.photo) {
+        photoEl.src = med.photo;
+        photoEl.classList.remove('hidden');
+        iconEl.classList.add('hidden');
+      } else {
+        photoEl.classList.add('hidden');
+        iconEl.textContent = FORM_ICONS[med.form] || '💊';
+        iconEl.classList.remove('hidden');
+      }
+
+      const exp = getExpiryInfo(med.expiry);
+      document.getElementById('detailBadges').innerHTML = `
+        <span class="px-2.5 py-0.5 rounded-full text-xs font-medium ${exp.badgeClass}">${exp.label}</span>
+        <span class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-700">${escapeHtml(med.category)}</span>
+        ${med.location ? `<span class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-700">📍 ${escapeHtml(med.location)}</span>` : ''}
+      `;
+
+      const cleanName = med.name.replace(/\(.*?\)/g, '').trim();
+      document.getElementById('linkWiki').href = med.instruction?.wikiUrl || `https://ru.wikipedia.org/w/index.php?search=${encodeURIComponent(cleanName)}`;
+      document.getElementById('linkRls').href = `https://www.rlsnet.ru/search_result.htm?word=${encodeURIComponent(cleanName)}`;
+      document.getElementById('linkVidal').href = `https://www.vidal.ru/search?t=all&q=${encodeURIComponent(cleanName)}`;
+
+      renderDetailInstruction(med);
+      document.getElementById('detailModal').classList.remove('hidden');
+
+      if (!med.instruction) {
+        refreshDetailFromOpenSources(med.id);
+      }
+    }
+
+    function renderDetailInstruction(med) {
+      const body = document.getElementById('detailStructuredBody');
+      const instr = med.instruction;
+
+      if (!instr) {
+        body.innerHTML = `
+          <div class="p-4 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-600">
+            Инструкция ещё не загружена. Нажмите <b>«Обновить из открытых источников»</b> или откройте препарат в справочнике РЛС / Vidal ниже.
+          </div>
+        `;
+        return;
+      }
+
+      const blocks = [];
+      if (instr.source) {
+        blocks.push(`<p class="text-xs text-teal-700 font-medium">Источник: ${escapeHtml(instr.source)}</p>`);
+      }
+      if (instr.summary) {
+        blocks.push(`
+          <div class="p-3 bg-slate-50 rounded-xl border border-slate-200">
+            <h4 class="font-semibold text-slate-900 text-xs uppercase tracking-wide mb-1">Описание (Wikipedia)</h4>
+            <p class="text-xs sm:text-sm text-slate-700 leading-relaxed">${escapeHtml(instr.summary)}</p>
+          </div>
+        `);
+      }
+      if (instr.indications) {
+        blocks.push(`
+          <div class="p-3 bg-teal-50/50 rounded-xl border border-teal-100">
+            <h4 class="font-semibold text-teal-900 text-xs uppercase tracking-wide mb-1">Показания к применению</h4>
+            <p class="text-xs sm:text-sm text-slate-700 leading-relaxed">${escapeHtml(instr.indications)}</p>
+          </div>
+        `);
+      }
+      if (instr.dosage) {
+        blocks.push(`
+          <div class="p-3 bg-sky-50/50 rounded-xl border border-sky-100">
+            <h4 class="font-semibold text-sky-900 text-xs uppercase tracking-wide mb-1">Дозировка и способ применения</h4>
+            <p class="text-xs sm:text-sm text-slate-700 leading-relaxed">${escapeHtml(instr.dosage)}</p>
+          </div>
+        `);
+      }
+      if (instr.warnings) {
+        blocks.push(`
+          <div class="p-3 bg-amber-50/60 rounded-xl border border-amber-200">
+            <h4 class="font-semibold text-amber-900 text-xs uppercase tracking-wide mb-1">Противопоказания и предупреждения</h4>
+            <p class="text-xs sm:text-sm text-slate-700 leading-relaxed">${escapeHtml(instr.warnings)}</p>
+          </div>
+        `);
+      }
+      if (instr.storage) {
+        blocks.push(`
+          <div class="p-3 bg-slate-50 rounded-xl border border-slate-200">
+            <h4 class="font-semibold text-slate-900 text-xs uppercase tracking-wide mb-1">Условия хранения</h4>
+            <p class="text-xs sm:text-sm text-slate-700">${escapeHtml(instr.storage)}</p>
+          </div>
+        `);
+      }
+
+      body.innerHTML = blocks.join('');
+    }
+
+    async function refreshDetailFromOpenSources(medId) {
+      const med = state.medicines.find(m => m.id === medId);
+      if (!med) return;
+      const loader = document.getElementById('detailLoadingState');
+      loader.classList.remove('hidden');
+      const result = await fetchDrugInfoFromOpenSources(med.name, false);
+      loader.classList.add('hidden');
+      if (result) {
+        if (result.photo && !med.photo) med.photo = result.photo;
+        med.instruction = result.instruction;
+        saveState();
+        renderAll();
+        if (state.currentDetailId === medId) {
+          openDetailModal(medId);
+        }
+        showToast('Инструкция и данные обновлены из открытых источников', 'teal');
+      }
+    }
+
+    function openMedModal(editId = null, prefillName = '') {
+      const form = document.getElementById('medForm');
+      form.reset();
+      document.getElementById('medEditId').value = '';
+      state.modalPhotoTemp = null;
+      state.modalPhotoSourceTemp = '';
+      document.getElementById('medModalPhotoPreviewWrap').classList.add('hidden');
+      document.getElementById('medPhotoFileLabel').textContent = '📷 Загрузить фото';
+
+      if (editId) {
+        const med = state.medicines.find(m => m.id === editId);
+        if (med) {
+          document.getElementById('medModalTitle').textContent = 'Редактировать лекарство';
+          document.getElementById('medEditId').value = med.id;
+          document.getElementById('medName').value = med.name;
+          document.getElementById('medFormType').value = med.form;
+          document.getElementById('medDosage').value = med.dosage || '';
+          document.getElementById('medQty').value = med.qty;
+          document.getElementById('medUnit').value = med.unit;
+          document.getElementById('medStep').value = med.step || 1;
+          document.getElementById('medExpiry').value = med.expiry || '';
+          document.getElementById('medCategory').value = med.category;
+          document.getElementById('medLocation').value = med.location || '';
+          document.getElementById('medNotes').value = med.notes || '';
+          if (med.photo) {
+            state.modalPhotoTemp = med.photo;
+            state.modalPhotoSourceTemp = 'Текущее фото препарата';
+            document.getElementById('medModalPhotoPreview').src = med.photo;
+            document.getElementById('medModalPhotoSourceText').textContent = state.modalPhotoSourceTemp;
+            document.getElementById('medModalPhotoPreviewWrap').classList.remove('hidden');
+          }
+        }
+      } else {
+        document.getElementById('medModalTitle').textContent = 'Добавить лекарство';
+        document.getElementById('medExpiry').value = addDaysISO(365);
+        if (prefillName) document.getElementById('medName').value = prefillName;
+      }
+
+      document.getElementById('medModal').classList.remove('hidden');
+    }
+
+    function openScheduleModal(preselectedMedId = '') {
+      const sel = document.getElementById('schedMedSelect');
+      sel.innerHTML = `<option value="">— Ввести название вручную —</option>` +
+        state.medicines.map(m => `<option value="${m.id}">${escapeHtml(m.name)} (${formatQty(m.qty)} ${escapeHtml(m.unit)})</option>`).join('');
+
+      document.getElementById('scheduleForm').reset();
+      document.getElementById('schedTimes').value = '09:00, 21:00';
+      document.getElementById('schedDoseText').value = '1 табл.';
+      document.getElementById('schedDeductAmount').value = '1';
+
+      if (preselectedMedId) {
+        sel.value = preselectedMedId;
+        document.getElementById('schedCustomNameWrap').classList.add('hidden');
+        const med = state.medicines.find(m => m.id === preselectedMedId);
+        if (med && med.form === 'Сироп') {
+          document.getElementById('schedDoseText').value = '5 мл';
+          document.getElementById('schedDeductAmount').value = '5';
+        }
+      } else {
+        document.getElementById('schedCustomNameWrap').classList.remove('hidden');
+      }
+
+      document.getElementById('scheduleModal').classList.remove('hidden');
+    }
+
+    let confirmCallback = null;
+    function showConfirm(title, message, okLabel, onOk) {
+      document.getElementById('confirmTitle').textContent = title;
+      document.getElementById('confirmMessage').textContent = message;
+      document.getElementById('confirmOkBtn').textContent = okLabel || 'Удалить';
+      confirmCallback = onOk;
+      document.getElementById('confirmModal').classList.remove('hidden');
+    }
+
+    function playChime() {
+      if (!state.soundEnabled) return;
+      try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtx) return;
+        const ctx = new AudioCtx();
+        const notes = [523.25, 659.25, 783.99];
+        notes.forEach((freq, idx) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.value = freq;
+          gain.gain.setValueAtTime(0.001, ctx.currentTime + idx * 0.16);
+          gain.gain.exponentialRampToValueAtTime(0.18, ctx.currentTime + idx * 0.16 + 0.03);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + idx * 0.16 + 0.45);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(ctx.currentTime + idx * 0.16);
+          osc.stop(ctx.currentTime + idx * 0.16 + 0.5);
+        });
+      } catch (e) {}
+    }
+
+    function triggerAlarm(sched, timeStr) {
+      state.activeAlarmPayload = { schedId: sched.id, time: timeStr, medName: sched.medName, doseText: sched.doseText };
+      document.getElementById('alarmBannerTitle').textContent = `Пора принять: ${sched.medName} (${sched.doseText})`;
+      document.getElementById('alarmBannerSubtitle').textContent = `Назначенное время: ${timeStr}${sched.note ? ' • ' + sched.note : ''}`;
+      document.getElementById('activeAlarmBanner').classList.remove('hidden');
+      playChime();
+
+      try {
+        if ('Notification' in window && Notification.permission === 'granted') {
+          new Notification(`Пора принять: ${sched.medName}`, {
+            body: `Доза: ${sched.doseText}${sched.note ? ' (' + sched.note + ')' : ''}`
+          });
+        }
+      } catch (e) {}
+    }
+
+    function checkAlarms() {
+      const now = new Date();
+      if (state.snoozedUntil && now.getTime() < state.snoozedUntil) return;
+      if (state.snoozedUntil && now.getTime() >= state.snoozedUntil) {
+        state.snoozedUntil = null;
+        if (state.activeAlarmPayload) {
+          document.getElementById('activeAlarmBanner').classList.remove('hidden');
+          playChime();
+        }
+        return;
+      }
+
+      const today = todayISO();
+      const hh = String(now.getHours()).padStart(2, '0');
+      const mm = String(now.getMinutes()).padStart(2, '0');
+      const hhmm = `${hh}:${mm}`;
+      const logs = state.doseLogs[today] || {};
+
+      state.schedules.forEach(s => {
+        (s.times || []).forEach(t => {
+          if (t === hhmm) {
+            const logKey = `${s.id}_${t}`;
+            const fireKey = `${today}_${logKey}`;
+            if (!logs[logKey] && !state.firedAlarms[fireKey]) {
+              state.firedAlarms[fireKey] = true;
+              triggerAlarm(s, t);
+            }
+          }
+        });
+      });
+    }
+
+    function markDoseTaken(schedId, key) {
+      const today = todayISO();
+      if (!state.doseLogs[today]) state.doseLogs[today] = {};
+      state.doseLogs[today][key] = true;
+
+      const sched = state.schedules.find(s => s.id === schedId);
+      if (sched && sched.medId && sched.deductAmount > 0) {
+        const med = state.medicines.find(m => m.id === sched.medId);
+        if (med) {
+          med.qty = Math.max(0, Number((med.qty - sched.deductAmount).toFixed(2)));
+          showToast(`Приём отмечен! Остаток «${med.name}»: ${formatQty(med.qty)} ${med.unit}`, 'teal');
+        }
+      } else {
+        showToast('Приём лекарства отмечен!', 'teal');
+      }
+      saveState();
+      renderAll();
+    }
+
+    function showToast(message, tone = 'slate') {
+      const colors = {
+        teal: 'bg-teal-700 text-white',
+        amber: 'bg-amber-600 text-white',
+        rose: 'bg-rose-600 text-white',
+        slate: 'bg-slate-800 text-white'
+      };
+      const el = document.createElement('div');
+      el.className = `px-4 py-2.5 rounded-xl shadow-lg text-xs sm:text-sm font-medium ${colors[tone] || colors.slate} transition-opacity duration-300`;
+      el.textContent = message;
+      document.getElementById('toastContainer').appendChild(el);
+      setTimeout(() => {
+        el.style.opacity = '0';
+        setTimeout(() => el.remove(), 300);
+      }, 3200);
+    }
+
+    function escapeHtml(str) {
+      return String(str || '').replace(/[&<>"']/g, c => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      }[c]));
+    }
+    function escapeAttr(str) {
+      return escapeHtml(str);
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      loadState();
+      renderAll();
+
+      document.querySelectorAll('.nav-tab').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const tab = btn.dataset.tab;
+          state.activeTab = tab;
+          document.querySelectorAll('.nav-tab').forEach(b => {
+            b.classList.toggle('tab-active', b.dataset.tab === tab);
+            b.classList.toggle('tab-inactive', b.dataset.tab !== tab);
+          });
+          ['cabinet', 'schedule', 'shopping', 'backup'].forEach(t => {
+            document.getElementById(`view-${t}`).classList.toggle('hidden', t !== tab);
+          });
+        });
+      });
+
+      document.getElementById('kpiExpiringCard').addEventListener('click', () => {
+        document.getElementById('filterStatus').value = 'expiring';
+        renderCabinet();
+      });
+      document.getElementById('kpiExpiredCard').addEventListener('click', () => {
+        document.getElementById('filterStatus').value = 'expired';
+        renderCabinet();
+      });
+      document.getElementById('kpiTodayCard').addEventListener('click', () => {
+        document.querySelector('.nav-tab[data-tab="schedule"]').click();
+      });
+
+      ['searchInput', 'filterCategory', 'filterStatus', 'filterForm'].forEach(id => {
+        document.getElementById(id).addEventListener('input', renderCabinet);
+        document.getElementById(id).addEventListener('change', renderCabinet);
+      });
+      document.getElementById('resetFiltersBtn').addEventListener('click', () => {
+        document.getElementById('searchInput').value = '';
+        document.getElementById('filterCategory').value = 'all';
+        document.getElementById('filterStatus').value = 'all';
+        document.getElementById('filterForm').value = 'all';
+        renderCabinet();
+      });
+
+      document.getElementById('openAddMedBtn').addEventListener('click', () => openMedModal());
+      document.getElementById('emptyAddBtn').addEventListener('click', () => openMedModal());
+      document.getElementById('closeMedModalBtn').addEventListener('click', () => document.getElementById('medModal').classList.add('hidden'));
+      document.getElementById('cancelMedModalBtn').addEventListener('click', () => document.getElementById('medModal').classList.add('hidden'));
+
+      document.getElementById('medPhotoFile').addEventListener('change', e => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = ev => {
+          state.modalPhotoTemp = ev.target.result;
+          state.modalPhotoSourceTemp = `Загружено: ${file.name}`;
+          document.getElementById('medModalPhotoPreview').src = state.modalPhotoTemp;
+          document.getElementById('medModalPhotoSourceText').textContent = state.modalPhotoSourceTemp;
+          document.getElementById('medModalPhotoPreviewWrap').classList.remove('hidden');
+          document.getElementById('medPhotoFileLabel').textContent = '✓ Фото выбрано';
+        };
+        reader.readAsDataURL(file);
+      });
+
+      document.getElementById('clearModalPhotoBtn').addEventListener('click', () => {
+        state.modalPhotoTemp = null;
+        state.modalPhotoSourceTemp = '';
+        document.getElementById('medModalPhotoPreviewWrap').classList.add('hidden');
+        document.getElementById('medPhotoFileLabel').textContent = '📷 Загрузить фото';
+      });
+
+      document.getElementById('fetchInfoPreviewBtn').addEventListener('click', async () => {
+        const name = document.getElementById('medName').value.trim();
+        if (!name) {
+          showToast('Сначала введите название препарата', 'amber');
+          return;
+        }
+        showToast('Ищу фото в Wikipedia...', 'slate');
+        const info = await fetchDrugInfoFromOpenSources(name, false);
+        if (info?.photo) {
+          state.modalPhotoTemp = info.photo;
+          state.modalPhotoSourceTemp = 'Фото из Wikipedia';
+          document.getElementById('medModalPhotoPreview').src = info.photo;
+          document.getElementById('medModalPhotoSourceText').textContent = state.modalPhotoSourceTemp;
+          document.getElementById('medModalPhotoPreviewWrap').classList.remove('hidden');
+          showToast('Фото найдено!', 'teal');
+        } else if (info) {
+          showToast('Инструкция найдена, но фото в Wikipedia отсутствует. Можете загрузить своё.', 'amber');
+        }
+      });
+
+      document.getElementById('medForm').addEventListener('submit', async e => {
+        e.preventDefault();
+        const editId = document.getElementById('medEditId').value;
+        const name = document.getElementById('medName').value.trim();
+        if (!name) return;
+
+        const payload = {
+          name,
+          form: document.getElementById('medFormType').value,
+          dosage: document.getElementById('medDosage').value.trim(),
+          qty: parseFloat(document.getElementById('medQty').value) || 0,
+          unit: document.getElementById('medUnit').value,
+          step: parseFloat(document.getElementById('medStep').value) || 1,
+          expiry: document.getElementById('medExpiry').value,
+          category: document.getElementById('medCategory').value,
+          location: document.getElementById('medLocation').value.trim(),
+          notes: document.getElementById('medNotes').value.trim(),
+          photo: state.modalPhotoTemp || ''
+        };
+
+        let targetId = editId;
+        if (editId) {
+          const idx = state.medicines.findIndex(m => m.id === editId);
+          if (idx !== -1) {
+            state.medicines[idx] = { ...state.medicines[idx], ...payload };
+          }
+        } else {
+          targetId = uid();
+          state.medicines.unshift({
+            id: targetId,
+            ...payload,
+            instruction: buildLocalInstruction(name)
+          });
+        }
+
+        saveState();
+        renderAll();
+        document.getElementById('medModal').classList.add('hidden');
+        showToast(editId ? 'Лекарство обновлено' : 'Лекарство добавлено! Подтягиваю инструкцию...', 'teal');
+
+        const fetched = await fetchDrugInfoFromOpenSources(name, true);
+        if (fetched) {
+          const med = state.medicines.find(m => m.id === targetId);
+          if (med) {
+            if (!med.photo && fetched.photo) med.photo = fetched.photo;
+            if (fetched.instruction) med.instruction = fetched.instruction;
+            saveState();
+            renderAll();
+          }
+        }
+      });
+
+      document.getElementById('purgeExpiredBtn').addEventListener('click', () => {
+        const expiredList = state.medicines.filter(m => getExpiryInfo(m.expiry).status === 'expired');
+        if (!expiredList.length) return;
+        showConfirm(
+          'Утилизировать просроченное?',
+          `Будет удалено препаратов: ${expiredList.length}. Хотите также перенести их в список покупок?`,
+          'Удалить и добавить в покупки',
+          () => {
+            expiredList.forEach(m => {
+              if (!state.shopping.some(s => s.name.toLowerCase().includes(m.name.toLowerCase()))) {
+                state.shopping.push({ id: uid(), name: `${m.name} (замена просроченного)`, done: false });
+              }
+            });
+            state.medicines = state.medicines.filter(m => getExpiryInfo(m.expiry).status !== 'expired');
+            saveState();
+            renderAll();
+            showToast('Просроченные лекарства удалены и добавлены в список покупок', 'teal');
+          }
+        );
+      });
+
+      document.getElementById('medGrid').addEventListener('click', e => {
+        const btn = e.target.closest('[data-action]');
+        if (!btn) return;
+        const action = btn.dataset.action;
+        const id = btn.dataset.id;
+        const med = state.medicines.find(m => m.id === id);
+        if (!med) return;
+
+        if (action === 'inc-qty') {
+          med.qty = Number((med.qty + (med.step || 1)).toFixed(2));
+          saveState();
+          renderAll();
+        } else if (action === 'dec-qty') {
+          med.qty = Math.max(0, Number((med.qty - (med.step || 1)).toFixed(2)));
+          saveState();
+          renderAll();
+          if (med.qty === 0) {
+            showToast(`«${med.name}» закончилось. Можно добавить в список покупок.`, 'amber');
+          }
+        } else if (action === 'delete-med') {
+          showConfirm('Удалить лекарство?', `Вы уверены, что хотите полностью удалить «${med.name}» из аптечки?`, 'Удалить', () => {
+            state.medicines = state.medicines.filter(m => m.id !== id);
+            saveState();
+            renderAll();
+            showToast(`«${med.name}» удалено из аптечки`, 'slate');
+          });
+        } else if (action === 'detail') {
+          openDetailModal(id);
+        }
+      });
+
+      document.getElementById('closeDetailModalBtn').addEventListener('click', () => document.getElementById('detailModal').classList.add('hidden'));
+      document.getElementById('detailRefreshApiBtn').addEventListener('click', () => {
+        if (state.currentDetailId) refreshDetailFromOpenSources(state.currentDetailId);
+      });
+      document.getElementById('detailEditBtn').addEventListener('click', () => {
+        const id = state.currentDetailId;
+        document.getElementById('detailModal').classList.add('hidden');
+        openMedModal(id);
+      });
+      document.getElementById('detailCreateScheduleBtn').addEventListener('click', () => {
+        const id = state.currentDetailId;
+        document.getElementById('detailModal').classList.add('hidden');
+        document.querySelector('.nav-tab[data-tab="schedule"]').click();
+        openScheduleModal(id);
+      });
+      document.getElementById('detailToShoppingBtn').addEventListener('click', () => {
+        const med = state.medicines.find(m => m.id === state.currentDetailId);
+        if (!med) return;
+        state.shopping.unshift({ id: uid(), name: `${med.name}${med.dosage ? ' ' + med.dosage : ''}`, done: false });
+        saveState();
+        renderAll();
+        showToast(`«${med.name}» добавлено в список покупок`, 'teal');
+      });
+
+      document.getElementById('openPresetsBtn').addEventListener('click', () => document.getElementById('presetsModal').classList.remove('hidden'));
+      document.getElementById('emptyPresetBtn').addEventListener('click', () => document.getElementById('presetsModal').classList.remove('hidden'));
+      document.getElementById('closePresetsModalBtn').addEventListener('click', () => document.getElementById('presetsModal').classList.add('hidden'));
+
+      document.querySelectorAll('.preset-pick-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const type = btn.dataset.preset;
+          const presets = {
+            basic: [
+              { name: 'Парацетамол', form: 'Таблетки', dosage: '500 мг', qty: 20, unit: 'шт.', step: 1, expiry: addDaysISO(500), category: 'Жаропонижающее и боль', location: 'Домашняя аптечка' },
+              { name: 'Аспирин', form: 'Таблетки', dosage: '500 мг', qty: 10, unit: 'шт.', step: 1, expiry: addDaysISO(400), category: 'Жаропонижающее и боль', location: 'Домашняя аптечка' },
+              { name: 'Хлоргексидин', form: 'Раствор', dosage: '0.05%', qty: 1, unit: 'флакон', step: 1, expiry: addDaysISO(300), category: 'Антисептики и раны', location: 'Ванная' },
+              { name: 'Активированный уголь', form: 'Таблетки', dosage: '250 мг', qty: 20, unit: 'шт.', step: 2, expiry: addDaysISO(600), category: 'ЖКТ и пищеварение', location: 'Домашняя аптечка' },
+              { name: 'Пантенол', form: 'Мазь / Гель', dosage: '5%', qty: 1, unit: 'тюбик', step: 1, expiry: addDaysISO(350), category: 'Антисептики и раны', location: 'Домашняя аптечка' }
+            ],
+            cold: [
+              { name: 'Амброксол (Лазолван) сироп', form: 'Сироп', dosage: '30 мг/5 мл', qty: 100, unit: 'мл', step: 5, expiry: addDaysISO(240), category: 'От кашля и простуды', location: 'Полка в комнате' },
+              { name: 'Ибупрофен (Нурофен)', form: 'Таблетки', dosage: '200 мг', qty: 12, unit: 'шт.', step: 1, expiry: addDaysISO(420), category: 'Жаропонижающее и боль', location: 'Домашняя аптечка' },
+              { name: 'Спрей для носа (морская вода)', form: 'Спрей', dosage: '50 мл', qty: 1, unit: 'флакон', step: 1, expiry: addDaysISO(320), category: 'От кашля и простуды', location: 'Прикроватная тумба' }
+            ],
+            stomach: [
+              { name: 'Смекта', form: 'Порошок', dosage: '3 г', qty: 10, unit: 'пак.', step: 1, expiry: addDaysISO(480), category: 'ЖКТ и пищеварение', location: 'Кухня' },
+              { name: 'Но-шпа (Дротаверин)', form: 'Таблетки', dosage: '40 мг', qty: 24, unit: 'шт.', step: 1, expiry: addDaysISO(540), category: 'ЖКТ и пищеварение', location: 'Домашняя аптечка' },
+              { name: 'Омепразол', form: 'Капсулы', dosage: '20 мг', qty: 14, unit: 'шт.', step: 1, expiry: addDaysISO(360), category: 'ЖКТ и пищеварение', location: 'Кухня' },
+              { name: 'Лоратадин', form: 'Таблетки', dosage: '10 мг', qty: 10, unit: 'шт.', step: 1, expiry: addDaysISO(400), category: 'Аллергия', location: 'Домашняя аптечка' }
+            ]
+          };
+
+          const list = presets[type] || [];
+          let added = 0;
+          list.forEach(p => {
+            if (!state.medicines.some(m => m.name.toLowerCase() === p.name.toLowerCase())) {
+              const id = uid();
+              state.medicines.unshift({ id, ...p, notes: '', photo: '', instruction: buildLocalInstruction(p.name) });
+              added++;
+              fetchDrugInfoFromOpenSources(p.name, true).then(info => {
+                const target = state.medicines.find(x => x.id === id);
+                if (target && info) {
+                  if (info.photo && !target.photo) target.photo = info.photo;
+                  if (info.instruction) target.instruction = info.instruction;
+                  saveState();
+                  renderAll();
+                }
+              }).catch(() => {});
+            }
+          });
+          saveState();
+          renderAll();
+          document.getElementById('presetsModal').classList.add('hidden');
+          showToast(added ? `Добавлено препаратов: ${added}` : 'Эти препараты уже есть в вашей аптечке', 'teal');
+        });
+      });
+
+      document.getElementById('openAddScheduleBtn').addEventListener('click', () => openScheduleModal());
+      document.getElementById('closeScheduleModalBtn').addEventListener('click', () => document.getElementById('scheduleModal').classList.add('hidden'));
+      document.getElementById('cancelScheduleModalBtn').addEventListener('click', () => document.getElementById('scheduleModal').classList.add('hidden'));
+
+      document.getElementById('schedMedSelect').addEventListener('change', e => {
+        const val = e.target.value;
+        document.getElementById('schedCustomNameWrap').classList.toggle('hidden', !!val);
+        if (val) {
+          const med = state.medicines.find(m => m.id === val);
+          if (med && med.form === 'Сироп') {
+            document.getElementById('schedDoseText').value = '5 мл';
+            document.getElementById('schedDeductAmount').value = '5';
+          }
+        }
+      });
+
+      document.getElementById('scheduleForm').addEventListener('submit', e => {
+        e.preventDefault();
+        const medId = document.getElementById('schedMedSelect').value;
+        const med = state.medicines.find(m => m.id === medId);
+        const medName = med ? med.name : document.getElementById('schedCustomName').value.trim();
+        if (!medName) {
+          showToast('Укажите название лекарства', 'amber');
+          return;
+        }
+        const timesRaw = document.getElementById('schedTimes').value;
+        const times = timesRaw.split(',').map(s => s.trim()).filter(s => /^\d{1,2}:\d{2}$/.test(s)).map(s => {
+          const [h, m] = s.split(':');
+          return `${h.padStart(2, '0')}:${m}`;
+        });
+        if (!times.length) {
+          showToast('Укажите корректное время в формате ЧЧ:ММ, например 09:00', 'amber');
+          return;
+        }
+
+        state.schedules.push({
+          id: uid(),
+          medId: med ? med.id : '',
+          medName,
+          doseText: document.getElementById('schedDoseText').value.trim() || '1 шт.',
+          deductAmount: parseFloat(document.getElementById('schedDeductAmount').value) || 0,
+          times,
+          note: document.getElementById('schedNote').value.trim()
+        });
+        saveState();
+        renderAll();
+        document.getElementById('scheduleModal').classList.add('hidden');
+        showToast(`Напоминание для «${medName}» сохранено`, 'teal');
+      });
+
+      document.getElementById('todayTimeline').addEventListener('click', e => {
+        const btn = e.target.closest('[data-action]');
+        if (!btn) return;
+        const action = btn.dataset.action;
+        const key = btn.dataset.key;
+        if (action === 'take-dose') {
+          markDoseTaken(btn.dataset.sched, key);
+        } else if (action === 'untake-dose') {
+          const today = todayISO();
+          if (state.doseLogs[today]) delete state.doseLogs[today][key];
+          saveState();
+          renderAll();
+        }
+      });
+
+      document.getElementById('prescriptionsList').addEventListener('click', e => {
+        const btn = e.target.closest('[data-action="delete-sched"]');
+        if (!btn) return;
+        const id = btn.dataset.id;
+        state.schedules = state.schedules.filter(s => s.id !== id);
+        saveState();
+        renderAll();
+        showToast('Назначение удалено', 'slate');
+      });
+
+      document.getElementById('enableNotifBtn').addEventListener('click', async () => {
+        try {
+          if (!('Notification' in window)) {
+            showToast('Браузерные уведомления недоступны, будут работать звуковые и экранные напоминания.', 'amber');
+            return;
+          }
+          const perm = await Notification.requestPermission();
+          if (perm === 'granted') showToast('Системные уведомления включены!', 'teal');
+          else showToast('Разрешение не выдано — напоминания будут появляться внутри приложения.', 'amber');
+        } catch (e) {
+          showToast('Будут использоваться встроенные уведомления и звуковой сигнал.', 'amber');
+        }
+      });
+
+      document.getElementById('toggleSoundBtn').addEventListener('click', () => {
+        state.soundEnabled = !state.soundEnabled;
+        saveState();
+        renderSchedule();
+      });
+
+      document.getElementById('testAlarmBtn').addEventListener('click', () => {
+        const sample = state.schedules[0] || { id: 'test', medName: 'Тестовое лекарство', doseText: '1 табл.', note: 'Проверка напоминания' };
+        const now = new Date();
+        const hhmm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+        triggerAlarm(sample, hhmm);
+      });
+
+      document.getElementById('alarmTakeBtn').addEventListener('click', () => {
+        if (state.activeAlarmPayload && state.activeAlarmPayload.schedId !== 'test') {
+          const key = `${state.activeAlarmPayload.schedId}_${state.activeAlarmPayload.time}`;
+          markDoseTaken(state.activeAlarmPayload.schedId, key);
+        } else {
+          showToast('Тестовое уведомление отмечено', 'teal');
+        }
+        document.getElementById('activeAlarmBanner').classList.add('hidden');
+        state.activeAlarmPayload = null;
+      });
+      document.getElementById('alarmSnoozeBtn').addEventListener('click', () => {
+        state.snoozedUntil = Date.now() + 10 * 60 * 1000;
+        document.getElementById('activeAlarmBanner').classList.add('hidden');
+        showToast('Напоминание отложено на 10 минут', 'slate');
+      });
+      document.getElementById('alarmDismissBtn').addEventListener('click', () => {
+        document.getElementById('activeAlarmBanner').classList.add('hidden');
+        state.activeAlarmPayload = null;
+      });
+
+      document.getElementById('shoppingAddForm').addEventListener('submit', e => {
+        e.preventDefault();
+        const inp = document.getElementById('shoppingInput');
+        const val = inp.value.trim();
+        if (!val) return;
+        state.shopping.unshift({ id: uid(), name: val, done: false });
+        inp.value = '';
+        saveState();
+        renderAll();
+      });
+
+      document.getElementById('autoFillShoppingBtn').addEventListener('click', () => {
+        let added = 0;
+        state.medicines.forEach(m => {
+          const exp = getExpiryInfo(m.expiry);
+          if (exp.status === 'expired' || isLowStock(m)) {
+            if (!state.shopping.some(s => s.name.toLowerCase().includes(m.name.toLowerCase()))) {
+              state.shopping.push({ id: uid(), name: `${m.name}${m.dosage ? ' ' + m.dosage : ''}`, done: false });
+              added++;
+            }
+          }
+        });
+        saveState();
+        renderAll();
+        showToast(added ? `Добавлено позиций: ${added}` : 'Все заканчивающиеся лекарства уже в списке', 'teal');
+      });
+
+      document.getElementById('shoppingListContainer').addEventListener('click', e => {
+        const el = e.target.closest('[data-action]');
+        if (!el) return;
+        const action = el.dataset.action;
+        const id = el.dataset.id;
+        const item = state.shopping.find(s => s.id === id);
+        if (!item) return;
+
+        if (action === 'toggle-shop') {
+          item.done = !item.done;
+          saveState();
+          renderAll();
+        } else if (action === 'delete-shop') {
+          state.shopping = state.shopping.filter(s => s.id !== id);
+          saveState();
+          renderAll();
+        } else if (action === 'shop-to-cabinet') {
+          state.shopping = state.shopping.filter(s => s.id !== id);
+          saveState();
+          renderAll();
+          document.querySelector('.nav-tab[data-tab="cabinet"]').click();
+          openMedModal(null, item.name.replace(/\(.*?\)/g, '').trim());
+        }
+      });
+
+      document.getElementById('exportJsonBtn').addEventListener('click', () => {
+        const blob = new Blob([JSON.stringify({
+          exportedAt: new Date().toISOString(),
+          medicines: state.medicines,
+          schedules: state.schedules,
+          shopping: state.shopping
+        }, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `aptechka-backup-${todayISO()}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+        showToast('Резервная копия скачана', 'teal');
+      });
+
+      document.getElementById('importJsonInput').addEventListener('change', e => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = ev => {
+          try {
+            const parsed = JSON.parse(ev.target.result);
+            if (Array.isArray(parsed.medicines)) state.medicines = parsed.medicines;
+            if (Array.isArray(parsed.schedules)) state.schedules = parsed.schedules;
+            if (Array.isArray(parsed.shopping)) state.shopping = parsed.shopping;
+            saveState();
+            renderAll();
+            showToast('Данные успешно импортированы!', 'teal');
+          } catch (err) {
+            showToast('Ошибка чтения JSON-файла', 'rose');
+          }
+        };
+        reader.readAsText(file);
+      });
+
+      document.getElementById('restoreDemoBtn').addEventListener('click', () => {
+        seedInitialDemoData();
+        renderAll();
+        showToast('Демо-примеры загружены', 'teal');
+      });
+
+      document.getElementById('clearAllDataBtn').addEventListener('click', () => {
+        showConfirm('Очистить всю аптечку?', 'Все лекарства, расписания и список покупок будут удалены.', 'Очистить всё', () => {
+          state.medicines = [];
+          state.schedules = [];
+          state.doseLogs = {};
+          state.shopping = [];
+          saveState();
+          renderAll();
+          showToast('Все данные очищены', 'slate');
+        });
+      });
+
+      document.getElementById('confirmCancelBtn').addEventListener('click', () => {
+        document.getElementById('confirmModal').classList.add('hidden');
+        confirmCallback = null;
+      });
+      document.getElementById('confirmOkBtn').addEventListener('click', () => {
+        document.getElementById('confirmModal').classList.add('hidden');
+        if (confirmCallback) confirmCallback();
+        confirmCallback = null;
+      });
+
+      setInterval(checkAlarms, 10000);
+    });
+  </script>
+</body>
+</html>
