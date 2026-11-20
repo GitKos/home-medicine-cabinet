@@ -42,7 +42,7 @@
 <body class="min-h-screen flex flex-col">
 
   <!-- Top Alarm Banner (Hidden by default, shown when medication time arrives) -->
-  <div id="activeAlarmBanner" class="hidden bg-amber-500 text-white px-4 py-3 shadow-lg sticky top-0 z-50">
+  <div id="activeAlarmBanner" class="hidden bg-amber-500 text-white px-4 py-3.5 shadow-xl fixed top-0 left-0 right-0 z-50">
     <div class="max-w-6xl mx-auto flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
       <div class="flex items-center gap-3">
         <span class="inline-flex items-center justify-center w-9 h-9 rounded-full bg-white/20 alarm-pulse text-lg">⏰</span>
@@ -320,26 +320,12 @@
         <div>
           <label class="block text-xs font-semibold text-slate-700 mb-1">Название препарата *</label>
           <div class="flex gap-2">
-            <input id="medName" type="text" required list="popularMedsDatalist" placeholder="Например: Аспирин, Сироп от кашля Лазолван..."
+            <input id="medName" type="text" required autocomplete="off" placeholder="Например: Аспирин, Лазолван сироп..."
               class="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
-            <button type="button" id="fetchInfoPreviewBtn" class="px-3 py-2 bg-teal-50 hover:bg-teal-100 text-teal-700 text-xs font-semibold rounded-xl border border-teal-200 whitespace-nowrap transition" title="Найти фото и инструкцию из открытых источников">
+            <button type="button" id="fetchInfoPreviewBtn" class="px-3 py-2 bg-teal-50 hover:bg-teal-100 text-teal-700 text-xs font-semibold rounded-xl border border-teal-200 whitespace-nowrap transition" title="Найти фото упаковки/препарата">
               🔍 Найти фото
             </button>
           </div>
-          <datalist id="popularMedsDatalist">
-            <option value="Аспирин">
-            <option value="Парацетамол">
-            <option value="Ибупрофен (Нурофен)">
-            <option value="Амброксол (Лазолван) сироп">
-            <option value="Но-шпа (Дротаверин)">
-            <option value="Активированный уголь">
-            <option value="Смекта">
-            <option value="Лоратадин">
-            <option value="Хлоргексидин">
-            <option value="Пантенол">
-            <option value="Омепразол">
-            <option value="Валидол">
-          </datalist>
         </div>
 
         <div class="grid grid-cols-2 gap-3">
@@ -489,17 +475,18 @@
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
           </svg>
-          <span>Загружаю инструкцию и фото из Wikipedia и OpenFDA...</span>
+          <span>Ищу официальную инструкцию на Vidal / OpenFDA...</span>
         </div>
 
         <div id="detailStructuredBody" class="space-y-3"></div>
 
-        <!-- External Medical Reference Links -->
+        <!-- Official Medical Registry Links -->
         <div class="pt-3 border-t border-slate-100 flex flex-wrap items-center gap-2 text-xs">
-          <span class="text-slate-500 font-medium">Проверить в справочниках:</span>
-          <a id="linkWiki" href="#" target="_blank" rel="noopener" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-700 font-medium transition">Wikipedia ↗</a>
-          <a id="linkRls" href="#" target="_blank" rel="noopener" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-700 font-medium transition">РЛС России ↗</a>
-          <a id="linkVidal" href="#" target="_blank" rel="noopener" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-700 font-medium transition">Vidal ↗</a>
+          <span class="text-slate-500 font-medium">Официальные реестры и инструкции:</span>
+          <a id="linkVidal" href="#" target="_blank" rel="noopener" class="px-2.5 py-1 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-lg text-teal-800 font-semibold transition">Vidal ↗</a>
+          <a id="linkRls" href="#" target="_blank" rel="noopener" class="px-2.5 py-1 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-lg text-teal-800 font-semibold transition">РЛС России ↗</a>
+          <a id="linkGrls" href="#" target="_blank" rel="noopener" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-700 font-medium transition">ГРЛС Минздрава ↗</a>
+          <a id="linkWiki" href="#" target="_blank" rel="noopener" class="hidden"></a>
         </div>
       </div>
     </div>
@@ -940,25 +927,42 @@
     }
 
     async function fetchDrugInfoFromOpenSources(name, silent = false) {
+      // 1. Inside Android app: fetch directly from official Russian drug registry (Vidal.ru) via native bridge (no CORS limits)
+      if (window.AndroidBridge && typeof window.AndroidBridge.fetchOfficialInstructionSync === 'function') {
+        try {
+          const rawJson = window.AndroidBridge.fetchOfficialInstructionSync(name);
+          if (rawJson) {
+            const official = JSON.parse(rawJson);
+            if (official && (official.indications || official.dosage || official.warnings || official.summary)) {
+              return {
+                photo: official.photo || '',
+                instruction: {
+                  source: official.source || 'Vidal (официальный справочник)',
+                  officialUrl: official.url || '',
+                  summary: official.summary || '',
+                  indications: official.indications || '',
+                  dosage: official.dosage || '',
+                  warnings: official.warnings || '',
+                  storage: official.storage || 'См. инструкцию на упаковке.'
+                }
+              };
+            }
+          }
+        } catch (e) {}
+      }
+
       const localRef = findLocalRef(name);
       const baseInstr = buildLocalInstruction(name) || {
-        source: 'Открытые источники',
-        wikiUrl: '',
+        source: '',
+        officialUrl: '',
         summary: '',
         indications: '',
         dosage: '',
         warnings: '',
-        storage: '',
-        fdaExtra: ''
+        storage: ''
       };
 
-      let wiki = null;
       let fda = null;
-
-      try {
-        wiki = await searchWikipediaRu(localRef ? localRef.wikiTitle : name);
-      } catch (e) {}
-
       const fdaQuery = localRef?.inn || (/^[a-zA-Z\s-]+$/.test(name) ? name.trim() : '');
       if (fdaQuery) {
         try {
@@ -966,30 +970,33 @@
         } catch (e) {}
       }
 
-      if (!wiki && !fda && !localRef) {
-        if (!silent) showToast('Не удалось автоматически найти статью в Wikipedia/OpenFDA. Попробуйте уточнить название или открыть РЛС.', 'amber');
-        return null;
+      // Wikipedia is used ONLY for fetching a photo if exact title matches, never as medical instruction text
+      let wikiPhoto = '';
+      try {
+        const wiki = await searchWikipediaRu(localRef ? localRef.wikiTitle : name);
+        if (wiki && wiki.photo) wikiPhoto = wiki.photo;
+      } catch (e) {}
+
+      if (!fda && !localRef) {
+        if (!silent) showToast('Автоматическая инструкция доступна в Android-приложении (с Vidal/РЛС) или по ссылкам РЛС/Vidal/ГРЛС ниже.', 'amber');
+        return wikiPhoto ? { photo: wikiPhoto, instruction: null } : null;
       }
 
       const sources = [];
       if (localRef) sources.push('Справочник');
-      if (wiki) sources.push('Wikipedia');
-      if (fda) sources.push('OpenFDA');
-
-      const merged = {
-        source: sources.join(' + '),
-        wikiUrl: wiki?.url || baseInstr.wikiUrl,
-        summary: wiki?.extract ? (wiki.extract.length > 550 ? wiki.extract.slice(0, 550) + '…' : wiki.extract) : '',
-        indications: baseInstr.indications || fda?.indications || '',
-        dosage: baseInstr.dosage || fda?.dosage || '',
-        warnings: baseInstr.warnings || fda?.warnings || '',
-        storage: baseInstr.storage || 'См. инструкцию на упаковке.',
-        fdaExtra: fda && localRef ? (fda.indications || fda.warnings || '') : ''
-      };
+      if (fda) sources.push('OpenFDA (официальный реестр США)');
 
       return {
-        photo: wiki?.photo || '',
-        instruction: merged
+        photo: wikiPhoto,
+        instruction: {
+          source: sources.join(' + '),
+          officialUrl: '',
+          summary: '',
+          indications: baseInstr.indications || fda?.indications || '',
+          dosage: baseInstr.dosage || fda?.dosage || '',
+          warnings: baseInstr.warnings || fda?.warnings || '',
+          storage: baseInstr.storage || 'См. инструкцию на упаковке.'
+        }
       };
     }
 
@@ -1219,15 +1226,15 @@
               : `<span class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-600">Предстоит</span>`;
 
           return `
-            <div class="flex items-center justify-between gap-3 p-3 rounded-xl border ${slot.taken ? 'bg-emerald-50/40 border-emerald-200' : 'bg-slate-50 border-slate-200'}">
-              <div class="flex items-center gap-3 min-w-0">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-3 rounded-xl border ${slot.taken ? 'bg-emerald-50/40 border-emerald-200' : 'bg-slate-50 border-slate-200'}">
+              <div class="flex items-start sm:items-center gap-3 min-w-0 flex-1">
                 <div class="px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 font-bold text-sm text-slate-800 shrink-0">${slot.time}</div>
-                <div class="min-w-0">
-                  <p class="font-semibold text-sm text-slate-900 truncate">${escapeHtml(slot.sched.medName)} — ${escapeHtml(slot.sched.doseText)}</p>
-                  ${slot.sched.note ? `<p class="text-xs text-slate-500 truncate">${escapeHtml(slot.sched.note)}</p>` : ''}
+                <div class="min-w-0 flex-1">
+                  <p class="font-semibold text-sm text-slate-900 break-words">${escapeHtml(slot.sched.medName)} <span class="text-teal-700 font-medium">— ${escapeHtml(slot.sched.doseText)}</span></p>
+                  ${slot.sched.note ? `<p class="text-xs text-slate-500 break-words mt-0.5">${escapeHtml(slot.sched.note)}</p>` : ''}
                 </div>
               </div>
-              <div class="flex items-center gap-2 shrink-0">
+              <div class="flex items-center justify-end gap-2 shrink-0">
                 ${badge}
                 ${slot.taken
                   ? `<button data-action="untake-dose" data-key="${slot.key}" class="px-2.5 py-1 text-xs text-slate-500 hover:text-slate-800 bg-white border border-slate-200 rounded-lg">Отменить</button>`
@@ -1307,9 +1314,9 @@
       `;
 
       const cleanName = med.name.replace(/\(.*?\)/g, '').trim();
-      document.getElementById('linkWiki').href = med.instruction?.wikiUrl || `https://ru.wikipedia.org/w/index.php?search=${encodeURIComponent(cleanName)}`;
+      document.getElementById('linkVidal').href = med.instruction?.officialUrl || `https://www.vidal.ru/search?t=all&q=${encodeURIComponent(cleanName)}`;
       document.getElementById('linkRls').href = `https://www.rlsnet.ru/search_result.htm?word=${encodeURIComponent(cleanName)}`;
-      document.getElementById('linkVidal').href = `https://www.vidal.ru/search?t=all&q=${encodeURIComponent(cleanName)}`;
+      document.getElementById('linkGrls').href = `https://grls.rosminzdrav.ru/GRLS.aspx?TradeNmR=${encodeURIComponent(cleanName)}`;
 
       renderDetailInstruction(med);
       document.getElementById('detailModal').classList.remove('hidden');
@@ -1510,6 +1517,34 @@
             body: `Доза: ${sched.doseText}${sched.note ? ' (' + sched.note + ')' : ''}`
           });
         }
+      } catch (e) {}
+    }
+
+    function hashStringInt(str) {
+      let h = 0;
+      for (let i = 0; i < str.length; i++) {
+        h = ((h << 5) - h) + str.charCodeAt(i);
+        h |= 0;
+      }
+      return Math.abs(h) % 2000000000;
+    }
+
+    function syncAndroidAlarms() {
+      if (!window.AndroidBridge || typeof window.AndroidBridge.scheduleDailyAlarm !== 'function') return;
+      try {
+        state.schedules.forEach(s => {
+          (s.times || []).forEach(t => {
+            const parts = t.split(':');
+            const hh = parseInt(parts[0], 10);
+            const mm = parseInt(parts[1], 10);
+            if (!isNaN(hh) && !isNaN(mm)) {
+              const idHash = hashStringInt(s.id + '_' + t);
+              const title = 'Пора принять: ' + (s.medName || 'Лекарство');
+              const body = 'Доза: ' + (s.doseText || '') + (s.note ? ' • ' + s.note : '');
+              window.AndroidBridge.scheduleDailyAlarm(idHash, hh, mm, title, body);
+            }
+          });
+        });
       } catch (e) {}
     }
 
@@ -1905,9 +1940,11 @@
           note: document.getElementById('schedNote').value.trim()
         });
         saveState();
+        syncAndroidAlarms();
         renderAll();
         document.getElementById('scheduleModal').classList.add('hidden');
         showToast(`Напоминание для «${medName}» сохранено`, 'teal');
+        checkAlarms();
       });
 
       document.getElementById('todayTimeline').addEventListener('click', e => {
@@ -1929,6 +1966,12 @@
         const btn = e.target.closest('[data-action="delete-sched"]');
         if (!btn) return;
         const id = btn.dataset.id;
+        const removed = state.schedules.find(s => s.id === id);
+        if (removed && window.AndroidBridge && typeof window.AndroidBridge.cancelAlarm === 'function') {
+          (removed.times || []).forEach(t => {
+            try { window.AndroidBridge.cancelAlarm(hashStringInt(removed.id + '_' + t)); } catch (e) {}
+          });
+        }
         state.schedules = state.schedules.filter(s => s.id !== id);
         saveState();
         renderAll();
@@ -2098,7 +2141,12 @@
         confirmCallback = null;
       });
 
-      setInterval(checkAlarms, 10000);
+      syncAndroidAlarms();
+      checkAlarms();
+      setInterval(checkAlarms, 3000);
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) checkAlarms();
+      });
     });
   </script>
 </body>

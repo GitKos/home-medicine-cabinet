@@ -21,6 +21,10 @@ import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
+import java.net.URLEncoder
 import java.util.Calendar
 
 class MainActivity : AppCompatActivity() {
@@ -70,14 +74,12 @@ class MainActivity : AppCompatActivity() {
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                 val url = request?.url?.toString() ?: return false
                 if (url.startsWith("file:///android_asset/")) return false
-                // Open external medical links (Wikipedia, РЛС, Vidal) in device browser
                 startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
                 return true
             }
 
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
-                // Forward web Notification calls to native Android notifications
                 val hookJs = """
                     (function() {
                         if (window._androidHooked) return;
@@ -129,6 +131,88 @@ class MainActivity : AppCompatActivity() {
     }
 
     class AndroidBridge(private val context: Context) {
+
+        private fun httpGet(urlStr: String): String {
+            val conn = URL(urlStr).openConnection() as HttpURLConnection
+            conn.requestMethod = "GET"
+            conn.connectTimeout = 8000
+            conn.readTimeout = 8000
+            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36")
+            return conn.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+        }
+
+        private fun cleanHtml(raw: String): String {
+            return raw
+                .replace(Regex("<script[^>]*>[\\s\\S]*?</script>", RegexOption.IGNORE_CASE), " ")
+                .replace(Regex("<style[^>]*>[\\s\\S]*?</style>", RegexOption.IGNORE_CASE), " ")
+                .replace(Regex("<[^>]+>"), " ")
+                .replace("&nbsp;", " ")
+                .replace("&laquo;", "«")
+                .replace("&raquo;", "»")
+                .replace("&mdash;", "—")
+                .replace("&ndash;", "–")
+                .replace(Regex("\\s+"), " ")
+                .trim()
+        }
+
+        private fun extractVidalSection(html: String, ids: List<String>): String {
+            for (id in ids) {
+                val pattern = Regex(
+                    """id=["']$id["'][\s\S]*?<div[^>]*class=["'][^"']*block-content[^"']*["'][^>]*>([\s\S]*?)</div>""",
+                    RegexOption.IGNORE_CASE
+                )
+                val match = pattern.find(html)
+                if (match != null) {
+                    val txt = cleanHtml(match.groupValues[1])
+                    if (txt.isNotEmpty()) {
+                        return if (txt.length > 700) txt.take(700) + "…" else txt
+                    }
+                }
+            }
+            return ""
+        }
+
+        @JavascriptInterface
+        fun fetchOfficialInstructionSync(drugName: String): String {
+            return try {
+                val cleanQuery = drugName
+                    .replace(Regex("\\(.*?\\)"), "")
+                    .replace(Regex("\\b(сироп|таблетки|мазь|капли|спрей|гель|раствор|капсулы)\\b", RegexOption.IGNORE_CASE), "")
+                    .trim()
+                    .ifEmpty { drugName.trim() }
+
+                val searchUrl = "https://www.vidal.ru/search?t=all&q=" + URLEncoder.encode(cleanQuery, "UTF-8")
+                val searchHtml = httpGet(searchUrl)
+
+                val drugLinkMatch = Regex("""href=["'](/drugs/[a-zA-Z0-9_-]+)["']""").find(searchHtml)
+                    ?: return ""
+                val drugUrl = "https://www.vidal.ru" + drugLinkMatch.groupValues[1]
+                val drugHtml = httpGet(drugUrl)
+
+                val indications = extractVidalSection(drugHtml, listOf("indication", "indications"))
+                val dosage = extractVidalSection(drugHtml, listOf("dosage"))
+                val warnings = extractVidalSection(drugHtml, listOf("contra", "side_effects", "special"))
+                val storage = extractVidalSection(drugHtml, listOf("storage_conditions", "storage"))
+
+                val imgMatch = Regex("""<img[^>]+src=["'](https://www\.vidal\.ru/upload/products/[^"']+|/upload/products/[^"']+)["']""").find(drugHtml)
+                val photoUrl = imgMatch?.groupValues?.get(1)?.let {
+                    if (it.startsWith("http")) it else "https://www.vidal.ru$it"
+                } ?: ""
+
+                JSONObject().apply {
+                    put("source", "Vidal.ru (официальный справочник)")
+                    put("url", drugUrl)
+                    put("photo", photoUrl)
+                    put("indications", indications)
+                    put("dosage", dosage)
+                    put("warnings", warnings)
+                    put("storage", storage)
+                }.toString()
+            } catch (e: Exception) {
+                ""
+            }
+        }
+
         @JavascriptInterface
         fun showNotification(title: String, body: String) {
             val intent = Intent(context, AlarmReceiver::class.java).apply {
@@ -140,28 +224,45 @@ class MainActivity : AppCompatActivity() {
 
         @JavascriptInterface
         fun scheduleDailyAlarm(idHash: Int, hour: Int, minute: Int, title: String, body: String) {
-            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-            val intent = Intent(context, AlarmReceiver::class.java).apply {
-                putExtra("title", title)
-                putExtra("body", body)
-                putExtra("notifId", idHash)
-            }
-            val pending = PendingIntent.getBroadcast(
-                context, idHash, intent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-            val cal = Calendar.getInstance().apply {
-                set(Calendar.HOUR_OF_DAY, hour)
-                set(Calendar.MINUTE, minute)
-                set(Calendar.SECOND, 0)
-                if (before(Calendar.getInstance())) add(Calendar.DATE, 1)
-            }
-            alarmManager.setRepeating(
-                AlarmManager.RTC_WAKEUP,
-                cal.timeInMillis,
-                AlarmManager.INTERVAL_DAY,
-                pending
-            )
+            try {
+                val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+                val intent = Intent(context, AlarmReceiver::class.java).apply {
+                    putExtra("title", title)
+                    putExtra("body", body)
+                    putExtra("notifId", idHash)
+                }
+                val pending = PendingIntent.getBroadcast(
+                    context, idHash, intent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+                val cal = Calendar.getInstance().apply {
+                    set(Calendar.HOUR_OF_DAY, hour)
+                    set(Calendar.MINUTE, minute)
+                    set(Calendar.SECOND, 0)
+                    set(Calendar.MILLISECOND, 0)
+                    if (before(Calendar.getInstance())) add(Calendar.DATE, 1)
+                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmManager.canScheduleExactAlarms()) {
+                    alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, cal.timeInMillis, pending)
+                } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, cal.timeInMillis, pending)
+                } else {
+                    alarmManager.setRepeating(AlarmManager.RTC_WAKEUP, cal.timeInMillis, AlarmManager.INTERVAL_DAY, pending)
+                }
+            } catch (_: Exception) {}
+        }
+
+        @JavascriptInterface
+        fun cancelAlarm(idHash: Int) {
+            try {
+                val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+                val intent = Intent(context, AlarmReceiver::class.java)
+                val pending = PendingIntent.getBroadcast(
+                    context, idHash, intent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+                alarmManager.cancel(pending)
+            } catch (_: Exception) {}
         }
     }
 }
